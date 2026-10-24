@@ -68,15 +68,19 @@ set(HEADERS
     ../third_party/miscutils/opengltools.h
 )
 
-if (CMAKE_CXX_COMPILER MATCHES "em\\+\\+$")
+if (EMSCRIPTEN)
     message("Compiling for WebAssembly/Emscripten")
     set(COMPILER_FLAGS -sWASM=1 -sUSE_SDL=2 -sUSE_SDL_TTF=2)
     set(COMPILER_FLAGS ${COMPILER_FLAGS} -sALLOW_MEMORY_GROWTH=1)
+    # Emscripten >= 3.1.27 shrank the default stack from 5MB to 64KB, which overflows during reconstruction.
+    set(COMPILER_FLAGS ${COMPILER_FLAGS} -sSTACK_SIZE=5MB)
     set(COMPILER_FLAGS ${COMPILER_FLAGS} -sMINIFY_HTML=0)
     set(COMPILER_FLAGS ${COMPILER_FLAGS} -sENVIRONMENT=web)
     set(COMPILER_FLAGS_OPENGL -sFULL_ES2=1)
     set(LINKER_FLAGS_OPENGL ${COMPILER_FLAGS_OPENGL})
-#    set(LINKER_FLAGS ${LINKER_FLAGS} ${COMPILER_FLAGS} "--preload-file ${CMAKE_SOURCE_DIR}/../data/examples@/tmp/examples")
+    if (EXISTS ${CMAKE_SOURCE_DIR}/../data/examples)
+        set(LINKER_FLAGS ${LINKER_FLAGS} "--preload-file ${CMAKE_SOURCE_DIR}/../data/examples@/tmp/examples")
+    endif()
     set(LINKER_FLAGS ${LINKER_FLAGS} ${COMPILER_FLAGS} "--preload-file ${CMAKE_SOURCE_DIR}/../data/shaders@../../data/shaders")
     set(LINKER_FLAGS ${LINKER_FLAGS} "--shell-file ${CMAKE_SOURCE_DIR}/ui/myshell.html")
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
@@ -111,9 +115,7 @@ set(LINKER_FLAGS ${LINKER_FLAGS}
     ${SDL2_LIBRARIES}
 )
 
-execute_process(COMMAND date +%y%m%d
-                OUTPUT_VARIABLE APP_VERSION_VAR
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
+string(TIMESTAMP APP_VERSION_VAR "%y%m%d")
 
 message("MM version: ${APP_VERSION_VAR}")
 
@@ -162,3 +164,23 @@ target_compile_definitions(monstermash PRIVATE ${DEFINES} ${DEFINES_OPENGL} ${DE
 target_include_directories(monstermash PRIVATE ${INCLUDEPATH})
 target_link_libraries(monstermash ${LINKER_FLAGS} ${LINKER_FLAGS_OPENGL} ${OPENGL_LIBRARIES})
 target_compile_options(monstermash PRIVATE ${COMPILER_FLAGS} ${COMPILER_FLAGS_OPENGL})
+
+if (EMSCRIPTEN)
+    # Copy the web UI files next to the build output so the build dir can be served directly.
+    set(WEB_INCLUDES
+        ${CMAKE_SOURCE_DIR}/ui/main.css
+        ${CMAKE_SOURCE_DIR}/ui/main.js
+        ${CMAKE_SOURCE_DIR}/../third_party/emscripten-ui/module.js
+        ${CMAKE_SOURCE_DIR}/../third_party/FileSaver/FileSaver.js
+    )
+    add_custom_command(TARGET monstermash POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/includes
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${WEB_INCLUDES} ${CMAKE_BINARY_DIR}/includes
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_BINARY_DIR}/monstermash.html ${CMAKE_BINARY_DIR}/index.html
+    )
+    if (EXISTS ${CMAKE_SOURCE_DIR}/../web-assets/imgs)
+        add_custom_command(TARGET monstermash POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/../web-assets/imgs ${CMAKE_BINARY_DIR}/imgs
+        )
+    endif()
+endif()
