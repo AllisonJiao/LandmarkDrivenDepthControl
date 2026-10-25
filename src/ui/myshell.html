@@ -599,6 +599,13 @@ The exported file may be directly imported into a recent version of <a href="htt
               <span class="buttonModeNumbers">2</span>Inflate
               <span id="spinnerInflateMode" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
             </button>
+            <button type="button" class="btn buttonMode mr-1 mb-1" data-toggle="button" id="buttonLandmarkMode" data-tooltip="tooltip" title="Place depth landmarks: left click adds and drags a handle, right click adds or toggles an anchor (L)">
+              <span class="buttonModeNumbers">L</span>Landmarks
+            </button>
+            <span id="landmarkControls" class="mr-1 mb-1">
+              <span id="landmarkReadout" class="badge badge-light"></span>
+              <input type="range" id="landmarkWeight" min="-4" max="5" step="0.5" value="5" data-tooltip="tooltip" title="Landmark fit: left = soft (smoother, approximate), right = hard (exact)">
+            </span>
             <button type="button" class="btn buttonMode mr-3 mb-1" data-toggle="button" id="buttonAnimate" data-tooltip="tooltip" title="Animate 3D model">
               <span class="buttonModeNumbers">3</span>Animate
               <span id="spinnerAnimate" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>

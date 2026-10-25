@@ -44,6 +44,19 @@ canvas.emscripten {
 #spinnerInflateMode, #spinnerAnimate {
   display: none;
 }
+#landmarkControls {
+  display: none;
+  align-self: center;
+}
+#landmarkReadout {
+  display: inline-block;
+  min-width: 4em;
+  font-size: 0.9em;
+}
+#landmarkWeight {
+  width: 6em;
+  vertical-align: middle;
+}
 .navbar {
   box-shadow: 0px 0px 5px 0px gray;
 }

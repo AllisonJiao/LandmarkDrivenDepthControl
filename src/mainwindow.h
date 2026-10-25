@@ -17,6 +17,8 @@
 
 #include "commonStructs.h"
 #include "exportgltf.h"
+#include "landmarks.h"
+#include "landmarksolver.h"
 #include "mywindow.h"
 
 class MainWindow : public MyWindow {
@@ -64,6 +66,7 @@ class MainWindow : public MyWindow {
                    const std::string &outFnWithoutExtension, bool saveTexture);
   int getNumberOfLayers();
   void moveSelectedLayersInDepth(int step, bool overlapping);
+  void setLandmarkWeight(double weight);
 
   // animation
   void offsetSelectedCpAnimsByFrames(double offset);
@@ -143,6 +146,15 @@ class MainWindow : public MyWindow {
   void toggleAutoSmoothAnim();
   bool removeCPAnims();
   void visualizeCPAnimTrajectories2D(MyPainter &screenPainter);
+
+  // landmarks
+  void handleMousePressEventLandmarkMode(const MyMouseEvent &event);
+  void handleMouseMoveEventLandmarkMode(const MyMouseEvent &event);
+  void handleMouseReleaseEventLandmarkMode(const MyMouseEvent &event);
+  void selectLandmark(int index);
+  void onLandmarksChanged();
+  void applyLandmarkSolve();
+  void rebuildDeformationEngine();
 
   Img<float> depthBuffer;
   Imguc frameBuffer;
@@ -242,6 +254,11 @@ class MainWindow : public MyWindow {
   bool rubberBandActive = false;
   std::map<int, int> touchPointId2CP;
 
+  // landmarks
+  LandmarkData landmarkData;
+  LandmarkSolver landmarkSolver;
+  double landmarkWeight = std::numeric_limits<double>::infinity();
+
   // control points transform
   bool transformRelative = false;
   typedef enum { TRANSLATE, SCALE, ROTATE } TransformRelativeType;
@@ -274,6 +291,8 @@ class MainWindow : public MyWindow {
   Eigen::Vector3d rotateCam = Eigen::Vector3d::Zero();
   std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> cameraTransforms;
   CameraData camDataDeformMode = {
+      .rotVer = 15, .rotHor = 30, .rotPrev = Eigen::Vector2d(30, 15)};
+  CameraData camDataLandmarkMode = {
       .rotVer = 15, .rotHor = 30, .rotPrev = Eigen::Vector2d(30, 15)};
   CameraData camData, camDataAnimateMode;
   bool &ortho = camData.ortho;

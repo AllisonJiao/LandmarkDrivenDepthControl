@@ -36,6 +36,7 @@ typedef enum {
   REGION_SWAP_MODE,
   REGION_MOVE_MODE,
   DEFORM_MODE,
+  LANDMARK_MODE,
   ANIMATE_MODE
 } SubManipulationMode;
 struct ManipulationMode {

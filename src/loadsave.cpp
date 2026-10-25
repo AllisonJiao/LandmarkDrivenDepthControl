@@ -304,6 +304,8 @@ bool loadSettingsFromStream(std::istream &stream, CPData &cpData,
         manipulationMode.setMode(ANIMATE_MODE);
       else if (s == "deform")
         manipulationMode.setMode(DEFORM_MODE);
+      else if (s == "landmark")
+        manipulationMode.setMode(LANDMARK_MODE);
       else if (s == "redraw")
         manipulationMode.setMode(REGION_REDRAW_MODE);
       else
@@ -391,6 +393,9 @@ bool saveSettingsToStream(std::ostream &stream, CPData &cpData,
       break;
     case DEFORM_MODE:
       manipulationModeStr = "deform";
+      break;
+    case LANDMARK_MODE:
+      manipulationModeStr = "landmark";
       break;
     default:
     case DRAW_OUTLINE:

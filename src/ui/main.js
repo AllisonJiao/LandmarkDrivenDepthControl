@@ -77,7 +77,19 @@ function js_manipulationModeChanged(newMode) {
     case 1: $('#dropdownImageModeRedraw').click();$('#buttonRedraw').focus(); break;
     case 2: $('#buttonInflateMode').click();$('#buttonInflateMode').focus(); break;
     case 3: $('#buttonAnimate').click();$('#buttonAnimate').focus(); break;
+    case 4: $('#buttonLandmarkMode').click();$('#buttonLandmarkMode').focus(); break;
   }
+}
+// slider value v: 10^v is the soft-constraint weight, the right end is hard
+$('#landmarkWeight').on('input', function() {
+  var v = parseFloat($(this).val());
+  var weight = v >= parseFloat($(this).attr('max')) ? 0 : Math.pow(10, v);
+  Module._setLandmarkWeight(weight);
+});
+function js_landmarkSelected(selected, factor, anchor) {
+  var text = '';
+  if (selected) text = anchor ? 'anchor' : '×' + factor.toFixed(2);
+  $('#landmarkReadout').text(text);
 }
 function js_textureTemplateExported() {
   const content = FS.readFile("/tmp/mm_template.png");
@@ -156,6 +168,7 @@ $(window).keydown(function(e) {
   if (e.which === 52 || e.which === 100) $('#dropdownImageModeRedraw').click();
   if (e.which === 50 || e.which === 98) $('#buttonInflateMode').click();
   if (e.which === 51 || e.which === 99) $('#buttonAnimate').click();
+  if (e.which === 76) $('#buttonLandmarkMode').click();
   if (e.which === 78) $('#buttonNewProject').click();
   if (e.which === 32) $('input[name=buttonPlayPause]').not(':checked').click();
   if (e.which === 69) $('#buttonRecord').click();
@@ -255,6 +268,13 @@ $('.buttonMode').click(function(e) {
     mode = 2;
     hideAnimationModeControls();
     showGeometryModeControls();
+  } else if (id == 'buttonLandmarkMode') {
+    if (prevMode < 2) {
+      $('#spinnerInflateMode').css('display', 'inline-block');
+    }
+    mode = 4;
+    hideAnimationModeControls();
+    showGeometryModeControls();
   } else if (id == 'buttonAnimate') {
     if (prevMode < 2) {
       $('#spinnerAnimate').css('display', 'inline-block');
@@ -263,6 +283,7 @@ $('.buttonMode').click(function(e) {
     showAnimationModeControls();
     showGeometryModeControls();
   }
+  $('#landmarkControls').css('display', mode == 4 ? 'inline-flex' : 'none');
   var timeout = 50;
   setTimeout(function() {
     Module._setManipulationMode(mode);

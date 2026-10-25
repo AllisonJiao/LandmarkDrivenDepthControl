@@ -27,6 +27,8 @@ set(SOURCES
     mywindow.cpp
     def3dsdl.cpp
     exportgltf.cpp
+    landmarks.cpp
+    landmarksolver.cpp
     ../third_party/ir3d-utils/regionToMesh.cpp
     ../third_party/ir3d-utils/MeshBuilder.cpp
     ../third_party/image/imageReadWrite.cpp
@@ -56,6 +58,8 @@ set(HEADERS
     def3dsdl.h
     macros.h
     exportgltf.h
+    landmarks.h
+    landmarksolver.h
     ../third_party/ir3d-utils/regionToMesh.h
     ../third_party/image/image.h
     ../third_party/image/imageReadWrite.hpp

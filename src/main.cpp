@@ -124,12 +124,20 @@ int convertManipulationModeToInt(ManipulationMode &mode) {
     modeInt = 2;
   else if (mode.mode == ANIMATE_MODE)
     modeInt = 3;
+  else if (mode.mode == LANDMARK_MODE)
+    modeInt = 4;
   return modeInt;
 }
 
 EMSCRIPTEN_KEEPALIVE int getManipulationMode() {
   ManipulationMode &mode = mainWindow.getManipulationMode();
   return convertManipulationModeToInt(mode);
+}
+
+EMSCRIPTEN_KEEPALIVE void setLandmarkWeight(double weight) {
+  if (weight <= 0 || weight >= 1e9)
+    weight = std::numeric_limits<double>::infinity();
+  mainWindow.setLandmarkWeight(weight);
 }
 
 EMSCRIPTEN_KEEPALIVE void setManipulationMode(int modeInt) {
@@ -140,6 +148,8 @@ EMSCRIPTEN_KEEPALIVE void setManipulationMode(int modeInt) {
     mode = DEFORM_MODE;
   else if (modeInt == 3)
     mode = ANIMATE_MODE;
+  else if (modeInt == 4)
+    mode = LANDMARK_MODE;
   mainWindow.changeManipulationMode(mode);
 }
 

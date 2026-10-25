@@ -14,6 +14,7 @@
 
 #include "mainwindow.h"
 
+#include <igl/cotmatrix.h>
 #include <igl/per_vertex_normals.h>
 #include <igl/writeOBJ.h>
 #include <image/imageUtils.h>
@@ -145,6 +146,12 @@ double MainWindow::handleDeformations() {
   double tElapsedMsARAP = 0;
   auto *defCurr = &def;
   if (manipulationMode.mode == DEFORM_MODE) defCurr = &defDeformMode;
+  // landmarks edit the rest shape directly, so show it without deformation
+  if (manipulationMode.mode == LANDMARK_MODE) {
+    defData.VCurr = mesh.VCurr;
+    defData.Faces = mesh.F;
+    return 0;
+  }
   if (mesh.VCurr.rows() == 0) {
     // mesh empty, skipping
     return 0;
@@ -181,6 +188,9 @@ bool MainWindow::drawModeTransition(MyPainter &painter,
     if (transitionCurrMode.mode == DEFORM_MODE) {
       rotHorTo = camDataDeformMode.rotHor;
       rotVerTo = camDataDeformMode.rotVer;
+    } else if (transitionCurrMode.mode == LANDMARK_MODE) {
+      rotHorTo = camDataLandmarkMode.rotHor;
+      rotVerTo = camDataLandmarkMode.rotVer;
     } else if (transitionCurrMode.mode == ANIMATE_MODE) {
       rotHorTo = camDataAnimateMode.rotHor;
       rotVerTo = camDataAnimateMode.rotVer;
@@ -407,7 +417,10 @@ void MainWindow::drawGeometryMode(MyPainter &painterModel,
   glViewport(0, 0, viewportW, viewportH);
   drawModelOpenGL(V, Vr, F, N);
 
-  if (showControlPoints) {
+  if (manipulationMode.mode == LANDMARK_MODE) {
+    drawLandmarks(landmarkData, V, landmarkSolver.defaultMesh(), F, proj3DView,
+                  painterOther);
+  } else if (showControlPoints) {
     if (manipulationMode.mode == ANIMATE_MODE) {
       if (!use3DCPTrajectoryVisualization)
         visualizeCPAnimTrajectories2D(painterOther);
@@ -1129,6 +1142,11 @@ void MainWindow::handleMousePressEventGeometryMode(const MyMouseEvent &event) {
     return;
   }
 
+  if (manipulationMode.mode == LANDMARK_MODE) {
+    handleMousePressEventLandmarkMode(event);
+    return;
+  }
+
   if (manipulationMode.mode == DEFORM_MODE) {
     if (event.leftButton || event.rightButton) {
       bool reverse = true;
@@ -1217,6 +1235,11 @@ void MainWindow::handleMouseMoveEventGeometryMode(const MyMouseEvent &event) {
       translateView =
           transPrev + translateViewFactor * (mouseCurrPos - mousePressStart);
     }
+    return;
+  }
+
+  if (manipulationMode.mode == LANDMARK_MODE) {
+    handleMouseMoveEventLandmarkMode(event);
     return;
   }
 
@@ -1312,6 +1335,11 @@ void MainWindow::handleMouseReleaseEventGeometryMode(
     return;
   }
 
+  if (manipulationMode.mode == LANDMARK_MODE) {
+    handleMouseReleaseEventLandmarkMode(event);
+    return;
+  }
+
   if (manipulationMode.mode == DEFORM_MODE) {
     defDeformMode.removeControlPoints();
     selectedPoints.clear();
@@ -1369,6 +1397,124 @@ void MainWindow::handleMouseReleaseEventGeometryMode(
       selectedPoint = -1;
     }
   }
+}
+
+void MainWindow::handleMousePressEventLandmarkMode(const MyMouseEvent &event) {
+  auto &VCurr = defData.VCurr;
+  auto &Faces = defData.Faces;
+  if (!(event.leftButton || event.rightButton)) return;
+  const bool rightMouseButtonActive =
+      event.rightButton || (event.leftButton && *rightMouseButtonSimulation);
+
+  const int hit = hitTestLandmarks(landmarkData, VCurr,
+                                   landmarkSolver.defaultMesh(), Faces,
+                                   proj3DView,
+                                   mouseCurrPos, 10);
+  if (hit != -1) {
+    selectLandmark(hit);
+    if (rightMouseButtonActive) {
+      // right click toggles between a draggable handle and an anchor
+      Landmark &lm = landmarkData.items[hit];
+      lm.anchor = !lm.anchor;
+      selectLandmark(hit);
+      onLandmarksChanged();
+    } else {
+      landmarkData.dragging = !landmarkData.items[hit].anchor;
+    }
+    return;
+  }
+
+  Landmark lm;
+  if (!pickLandmark(VCurr, landmarkSolver.defaultMesh(), Faces, proj3DView,
+                    mouseCurrPos, lm)) {
+    selectLandmark(-1);
+    return;
+  }
+  lm.anchor = rightMouseButtonActive;
+  if (lm.anchor && lm.baseHeight > 0) {
+    // an anchor holds the surface at its current (possibly edited) depth
+    lm.factor = lm.side * surfacePoint(VCurr, Faces, lm)(2) / lm.baseHeight;
+  }
+  landmarkData.items.push_back(lm);
+  selectLandmark(landmarkData.items.size() - 1);
+  landmarkData.dragging = !lm.anchor;
+  onLandmarksChanged();
+}
+
+void MainWindow::handleMouseMoveEventLandmarkMode(const MyMouseEvent &event) {
+  const int sel = landmarkData.selected;
+  if (!landmarkData.dragging || sel == -1) return;
+  dragLandmark(landmarkData.items[sel], landmarkSolver.defaultMesh(),
+               defData.Faces,
+               proj3DView, mouseCurrPos);
+  applyLandmarkSolve();
+  selectLandmark(sel);  // refresh the readout
+}
+
+void MainWindow::handleMouseReleaseEventLandmarkMode(
+    const MyMouseEvent &event) {
+  if (!landmarkData.dragging) return;
+  landmarkData.dragging = false;
+  onLandmarksChanged();
+}
+
+void MainWindow::selectLandmark(int index) {
+  landmarkData.selected = index;
+  repaint = true;
+#ifdef __EMSCRIPTEN__
+  if (index == -1) {
+    EM_ASM({ js_landmarkSelected(0, 0, 0); });
+  } else {
+    const Landmark &lm = landmarkData.items[index];
+    EM_ASM({ js_landmarkSelected(1, $0, $1); }, lm.factor, lm.anchor);
+  }
+#endif
+}
+
+void MainWindow::onLandmarksChanged() {
+  landmarkSolver.setConstraints(landmarkData.items, landmarkWeight);
+  applyLandmarkSolve();
+}
+
+void MainWindow::applyLandmarkSolve() {
+  if (!landmarkSolver.isReady()) return;
+  MatrixXd VRest;
+  if (!landmarkSolver.solve(landmarkData.items, VRest)) return;
+  mesh.VRest = VRest;
+  mesh.VCurr = VRest;
+  defData.VCurr = mesh.VCurr;
+  if (manipulationMode.mode != LANDMARK_MODE) rebuildDeformationEngine();
+  repaint = true;
+}
+
+void MainWindow::rebuildDeformationEngine() {
+  // DefEngARAPL caches rest-shape quantities, so start from a fresh engine
+  // with the same settings
+  DefEngARAPL fresh;
+  fresh.ineqRegionConds = defEng.ineqRegionConds;
+  fresh.mergeArmpitsCorrs = defEng.mergeArmpitsCorrs;
+  fresh.bnds = defEng.bnds;
+  fresh.partsIds = defEng.partsIds;
+  fresh.tempSmoothingSteps = defEng.tempSmoothingSteps;
+  fresh.maxIter = defEng.maxIter;
+  fresh.mergeBnd = defEng.mergeBnd;
+  fresh.searchThreshold = defEng.searchThreshold;
+  fresh.cpOptimizeForXY = defEng.cpOptimizeForXY;
+  fresh.cpOptimizeForZ = defEng.cpOptimizeForZ;
+  fresh.interiorDepthConditions = defEng.interiorDepthConditions;
+  fresh.armpitsStitchingInJointOptimization =
+      defEng.armpitsStitchingInJointOptimization;
+  fresh.rigidity = defEng.rigidity;
+  fresh.M = defEng.M;
+  fresh.Minv = defEng.Minv;
+  cotmatrix(mesh.VRest, mesh.F, fresh.L);
+  defEng = fresh;
+  defEng.precompute(def, mesh);
+}
+
+void MainWindow::setLandmarkWeight(double weight) {
+  landmarkWeight = weight;
+  onLandmarksChanged();
 }
 
 void MainWindow::drawLine(const MyMouseEvent &event, int x1, int y1, int x2,
@@ -1597,6 +1743,8 @@ void MainWindow::reset() {
   templateImg.setNull();
   backgroundImg.setNull();
   showModel = false;
+  landmarkData = LandmarkData();
+  landmarkSolver = LandmarkSolver();
 
   // reset reconstruction data
   recData = RecData();
@@ -1638,6 +1786,18 @@ void MainWindow::changeManipulationMode(
   DEBUG_CMD_MM(cout << "changeManipulationMode: " << prevMode.mode << " -> "
                     << manipulationMode.mode << endl;);
 
+  // the rest shape may have been edited by landmarks
+  if (prevMode.mode == LANDMARK_MODE &&
+      manipulationMode.isGeometryModeActive()) {
+    rebuildDeformationEngine();
+  }
+  // landmarks are edited on the unposed rest shape
+  if (prevMode.isGeometryModeActive() &&
+      manipulationMode.mode == LANDMARK_MODE) {
+    mesh.VCurr = mesh.VRest;
+    defData.VCurr = mesh.VCurr;
+  }
+
   // going from DEFORM_MODE
   if (prevMode.mode == DEFORM_MODE && manipulationMode.mode != DEFORM_MODE) {
     DEBUG_CMD_MM(cout << "restoring data from backup" << endl;);
@@ -1656,6 +1816,10 @@ void MainWindow::changeManipulationMode(
 
       // reset camera matrix (needed for proper transitions)
       proj3DView = proj3DViewInv = Matrix4d::Identity();
+
+      landmarkSolver.prepare(mesh.VRest, mesh.F, defEng.bnds);
+      rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F);
+      if (!landmarkData.items.empty()) onLandmarksChanged();
 
     } else {
       progressMessage = "Reconstruction failed";
@@ -1763,7 +1927,14 @@ void MainWindow::transformApply() { transformEnd(true); }
 void MainWindow::transformDiscard() { transformEnd(false); }
 
 void MainWindow::removeControlPointOrRegion() {
-  if (manipulationMode.isGeometryModeActive()) {
+  if (manipulationMode.mode == LANDMARK_MODE) {
+    if (landmarkData.selected != -1) {
+      landmarkData.items.erase(landmarkData.items.begin() +
+                               landmarkData.selected);
+      selectLandmark(-1);
+      onLandmarksChanged();
+    }
+  } else if (manipulationMode.isGeometryModeActive()) {
     // if there are CP animations, remove them only; remove control points
     // otherwise
     if (!removeCPAnims()) removeControlPoints();
@@ -1858,6 +2029,7 @@ void MainWindow::deselectAllRegions() {
 void MainWindow::deselectAll() {
   deselectAllControlPoints();
   deselectAllRegions();
+  selectLandmark(-1);
   repaint = true;
 }
 
