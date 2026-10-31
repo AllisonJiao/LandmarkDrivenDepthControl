@@ -195,6 +195,15 @@ EMSCRIPTEN_KEEPALIVE void saveProject() {
   EM_ASM(js_projectSaved(););
 }
 
+EMSCRIPTEN_KEEPALIVE void exportSdsScene() {
+  const bool ok = mainWindow.exportSdsScene("/tmp/mm_sds_scene.json");
+  EM_ASM({ js_sdsSceneExported($0); }, ok);
+}
+
+EMSCRIPTEN_KEEPALIVE int importSdsResult() {
+  return mainWindow.importSdsResult("/tmp/mm_sds_result.json") ? 1 : 0;
+}
+
 EMSCRIPTEN_KEEPALIVE void exportTextureTemplate() {
   mainWindow.exportTextureTemplate("/tmp/mm_template.png");
   EM_ASM(js_textureTemplateExported(););

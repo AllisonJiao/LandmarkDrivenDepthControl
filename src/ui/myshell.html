@@ -568,6 +568,9 @@ The exported file may be directly imported into a recent version of <a href="htt
                 <label class="dropdown-item" data-tooltip="tooltip" title="Import a background image that will be placed behind 3D model">
                   <input type="file" id="buttonImportBackgroundImage" accept=".png,.jpg,.jpeg,.bmp" hidden>Import background image&hellip;
                 </label>
+                <label class="dropdown-item" data-tooltip="tooltip" title="Import the heights optimized by the score distillation tool as the new default shape">
+                  <input type="file" id="buttonImportSdsResult" accept=".json" hidden>Import SDS result&hellip;
+                </label>
               </div>
             </div>
             <div class="btn-group mr-3 mb-1">
@@ -575,6 +578,7 @@ The exported file may be directly imported into a recent version of <a href="htt
               <button type="button" class="btn dropdown-toggle dropdown-toggle-split" data-toggle="dropdown" aria-expanded="false" data-tooltip="tooltip" title="More export options"></button>
               <div class="dropdown-menu">
                 <a class="dropdown-item" href="#" id="dropdownSaveProject">Save project&hellip;</a>
+                <a class="dropdown-item" href="#" id="dropdownExportSdsScene" data-tooltip="tooltip" title="Export the inflated mesh, its operators and landmarks for the score distillation tool">Export for SDS&hellip;</a>
                 <a class="dropdown-item" href="#" id="buttonExportTextureTemplate">Export a template for texturing&hellip;</a>
                 <div class="dropdown-divider"></div>
                 <a class="dropdown-item disabled" href="#" id="buttonExportAsOBJ">Export the current animation frame as .obj file&hellip;</a>

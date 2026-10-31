@@ -21,6 +21,7 @@
 // clang-format on
 
 #include <Eigen/Dense>
+#include <string>
 #include <vector>
 
 #include "landmarks.h"
@@ -45,12 +46,19 @@ class LandmarkSolver {
   // into VRestOut (x,y are copied from the default mesh).
   bool solve(const std::vector<Landmark> &lms, Eigen::MatrixXd &VRestOut);
 
+  // Writes the default mesh, the flat operators L and M, the outline
+  // indices and the landmarks as JSON for the external score distillation
+  // tool (sds/).
+  bool exportScene(const std::string &path,
+                   const std::vector<Landmark> &lms) const;
+
   bool isReady() const { return ready; }
   const Eigen::MatrixXd &defaultMesh() const { return VDefault; }
 
  private:
   Eigen::MatrixXd VDefault;
   Eigen::MatrixXi F;
+  Eigen::SparseMatrix<double> L, M;  // flat cotangent Laplacian, Voronoi mass
   Eigen::SparseMatrix<double> Q, B;
   Eigen::VectorXd u0;
   Eigen::VectorXi fixedIdx;
