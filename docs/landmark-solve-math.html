@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Full-Dimensional Landmark Solve</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body, {delimiters: [
+    {left: '$$', right: '$$', display: true},
+    {left: '\\(', right: '\\)', display: false}], throwOnError: false});
+    document.body.setAttribute('data-math-done', '1');"></script>
+<style>
+  @page { size: Letter; margin: 2cm 2.2cm; }
+  body { font-family: "Georgia", "Times New Roman", serif; font-size: 11pt; line-height: 1.5; color: #111; max-width: 46em; margin: 0 auto; }
+  h1 { font-size: 20pt; margin: 0 0 0.2em; }
+  .subtitle { color: #555; margin: 0 0 1.2em; }
+  h2 { font-size: 14pt; margin: 1.6em 0 0.4em; border-bottom: 1px solid #ccc; padding-bottom: 0.15em; break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 1.1em 0 0.2em; break-after: avoid; }
+  p { margin: 0.35em 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.6em 0; font-size: 10pt; break-inside: avoid; }
+  th, td { border: 1px solid #bbb; padding: 4px 7px; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; }
+  .katex-display { margin: 0.55em 0; }
+  .note { color: #444; font-size: 10pt; }
+  .box { border-left: 3px solid #888; padding: 0.2em 0.8em; background: #f7f7f7; margin: 0.6em 0; break-inside: avoid; }
+  ol, ul { margin: 0.3em 0 0.3em 1.3em; padding: 0; }
+  li { margin: 0.2em 0; }
+  code { font-family: Consolas, monospace; font-size: 9.5pt; }
+  .refs li { font-size: 9.5pt; }
+</style>
+</head>
+<body>
+
+<h1>Full-Dimensional Landmark Solve</h1>
+<p class="subtitle">Landmark-Driven Depth Control for Sketch-Based Inflation &mdash; math notes, compared with the original Monster Mash inflation.<br>
+Code: <code>src/reconstruction.cpp</code> (Monster Mash), <code>src/landmarksolver.cpp</code> (ours).</p>
+
+<h2>Notation</h2>
+<table>
+<tr><th>Symbol</th><th>Meaning</th></tr>
+<tr><td>\(V,\ F\)</td><td>mesh vertices and triangles; \(x, y\) come from the sketch</td></tr>
+<tr><td>\(L\)</td><td>cotangent Laplacian of the <em>flat</em> mesh (\(z = 0\)); negative semi-definite (libigl convention)</td></tr>
+<tr><td>\(M\)</td><td>diagonal Voronoi mass matrix; \(M_{ii}\) is the area around vertex \(i\)</td></tr>
+<tr><td>\(\partial\)</td><td>outline (boundary) vertices</td></tr>
+<tr><td>\(z\) or \(u\)</td><td>depth <em>before</em> the square root (the &ldquo;membrane&rdquo; field)</td></tr>
+<tr><td>\(h\)</td><td>final height after the square root</td></tr>
+<tr><td>\(p\)</td><td>pressure (right-hand side of the Poisson equation)</td></tr>
+</table>
+
+<h2>1. Original Monster Mash inflation</h2>
+
+<h3>Step 1 &mdash; Flat operators</h3>
+$$L = \operatorname{cotmatrix}(V_{\text{flat}}, F), \qquad M = \operatorname{massmatrix}(V_{\text{flat}}, F)$$
+
+<h3>Step 2 &mdash; One constant pressure per part</h3>
+$$p_v = c_i \ \text{ for every vertex } v \text{ in part } i, \qquad c_i = 2 \ \text{(default)}, \qquad c_{\text{back}} = -\,c_{\text{front}}$$
+
+<h3>Step 3 &mdash; Poisson solve with the outline clamped</h3>
+$$M^{-1} L\, z = p \ \ \text{on interior vertices}, \qquad z = 0 \ \ \text{on } \partial$$
+<p>This is the discrete form of \(\Delta z = p\). It is solved once and is linear in \(p\).</p>
+
+<h3>Step 4 &mdash; Square-root profile</h3>
+$$h = \operatorname{sgn}(z)\,\sqrt{|z|}$$
+<p>Afterwards the parts are merged and every coordinate is scaled by the subsampling factor \(s = 2\).
+For a disk of radius \(R\) with uniform \(c\), \(|z| = c\,(R^2 - r^2)/4\) and therefore
+\(h = \tfrac{\sqrt{c}}{2}\sqrt{R^2 - r^2}\): an exact circular profile.</p>
+
+<div class="box">Monster Mash has a few degrees of freedom &mdash; one pressure value per part &mdash; and no depth control inside a part.</div>
+
+<h2>2. Full-dimensional landmark solve</h2>
+
+<h3>Step 0 &mdash; Input</h3>
+<p>The rest mesh produced by Monster Mash, \(V_0\) with heights \(h_0\), and the landmarks.</p>
+
+<h3>Step 1 &mdash; Same flat operators</h3>
+<p>\(L\) and \(M\) are built on \(V_0\) flattened to \(z = 0\), exactly as in Monster Mash.</p>
+
+<h3>Step 2 &mdash; Undo the square root</h3>
+$$u_0 = \operatorname{sgn}(h_0)\, h_0^{2} \qquad \bigl(= s^2\, z_{\text{MM}}\bigr)$$
+<p>The default pressure is implicit: \(p_0 = M^{-1} L\, u_0 \approx s^2 c_i\) inside each part. The constant \(s^2\) is irrelevant because everything is linear.</p>
+
+<h3>Step 3 &mdash; Unknown: a correction to the default</h3>
+$$u = u_0 + \Delta u, \qquad \Delta u = 0 \ \text{ on } \partial \quad \text{(outline stays clamped)}$$
+<p>Because \(L\,u = M\,p\) is linear, the corresponding pressure change is</p>
+$$\Delta p = M^{-1} L\, \Delta u \qquad \text{(one value per vertex: the full representation)}.$$
+
+<h3>Step 4 &mdash; Energy: smallest pressure change</h3>
+$$E(\Delta u) \;=\; \tfrac12\, \Delta p^{\top} M\, \Delta p \;=\; \tfrac12\, \Delta u^{\top}\, \underbrace{L^{\top} M^{-1} L}_{Q}\, \Delta u$$
+<p>This discretizes \(\tfrac12 \int (\Delta\,\Delta u)^2\, dA\). Away from landmarks the minimizer satisfies \(\Delta^2 \Delta u = 0\): the correction is <strong>biharmonic</strong>
+(as in Zhang et al. 2001 and Botsch &amp; Kobbelt 2004, discretized as in Jacobson et al. 2010).</p>
+<p class="note">Alternative (smoothest pressure change, triharmonic): \(Q_B = L^{\top} M^{-1} (-L)\, M^{-1} L\) &mdash; smoother but less local.</p>
+
+<h3>Step 5 &mdash; Landmark constraints</h3>
+<p>Landmark \(k\) lies in triangle \(f_k\) with barycentric weights \(\beta_k\); row \(b_k\) of the sparse matrix \(B\) holds those three weights. The default membrane value at the landmark is</p>
+$$\bar u_k = b_k^{\top} u_0 .$$
+<p>A height factor \(f_k\) means \(h \mapsto f_k\, h\). Since \(u \propto h^2\), the target and the residual are</p>
+$$t_k = f_k^{2}\, \bar u_k, \qquad r_k = t_k - b_k^{\top} u_0 = \bigl(f_k^{2} - 1\bigr)\, \bar u_k .$$
+<p>Stacking all landmarks gives \(B\,\Delta u = r\). An anchor is the same constraint with its factor frozen; \(f_k = 1\) gives \(r_k = 0\) exactly.</p>
+
+<h3>Step 6a &mdash; Hard constraints (\(w = \infty\))</h3>
+$$\min_{\Delta u}\ \tfrac12\, \Delta u^{\top} Q\, \Delta u \quad \text{s.t.} \quad B\,\Delta u = r, \quad \Delta u_{\partial} = 0$$
+<p>With interior unknowns \(I\) and Lagrange multipliers \(\lambda\), this is the KKT system</p>
+$$\begin{bmatrix} Q_{II} & B_I^{\top} \\ B_I & 0 \end{bmatrix}
+  \begin{bmatrix} \Delta u_I \\ \lambda \end{bmatrix}
+  = \begin{bmatrix} 0 \\ r \end{bmatrix}.$$
+
+<h3>Step 6b &mdash; Soft constraints (weight \(w\))</h3>
+$$\min_{\Delta u}\ \tfrac12\, \Delta u^{\top} Q\, \Delta u + \tfrac{w}{2}\, \bigl\| B\,\Delta u - r \bigr\|^2
+\quad\Longrightarrow\quad \bigl(Q + w\, B^{\top} B\bigr)_{II}\, \Delta u_I = w\, B_I^{\top}\, r$$
+<p>As \(w \to \infty\) this becomes the hard case; as \(w \to 0\), \(\Delta u \to 0\) and the default Monster Mash shape is recovered.</p>
+
+<h3>Step 7 &mdash; Back to heights</h3>
+$$u = u_0 + \Delta u, \qquad h = \operatorname{sgn}(u)\,\sqrt{|u|}, \qquad x,\ y \ \text{unchanged}$$
+
+<h3>Step 8 &mdash; Why dragging is live</h3>
+<p>The system matrix depends only on <em>where</em> the landmarks are (and on \(w\)); the right-hand side depends only on the factors \(f_k\). Adding or removing a landmark, or changing \(w\), costs one factorization (LU for the KKT system, Cholesky for the soft case); each drag step is a single back-substitution (about 1&nbsp;ms on 5k vertices).
+Equivalently (representer theorem), the hard solution blends one response per landmark:</p>
+$$\Delta u = \sum_k \lambda_k\, g_k, \qquad g_k = Q^{-1} b_k, \qquad \lambda = \bigl(B\, Q^{-1} B^{\top}\bigr)^{-1} r ,$$
+<p>where each \(g_k\) is a biharmonic Green&rsquo;s function centred at landmark \(k\), with zero depth change on the outline.</p>
+
+<h2>3. Comparison</h2>
+<table>
+<tr><th></th><th>Monster Mash</th><th>Full landmark solve</th></tr>
+<tr><td>Pressure</td><td>constant per part, \(c_i\)</td><td>\(p_0 + \Delta p\), one value per vertex</td></tr>
+<tr><td>How it is chosen</td><td>fixed default (2)</td><td>smallest \(\Delta p\) meeting the landmark targets</td></tr>
+<tr><td>Equation</td><td>Poisson: \(M^{-1}L\,z = p\)</td><td>Poisson for \(u_0\) + biharmonic correction \(\Delta u\)</td></tr>
+<tr><td>Unknown</td><td>\(z\)</td><td>\(\Delta u\) on top of Monster Mash&rsquo;s result</td></tr>
+<tr><td>Boundary</td><td>\(z = 0\) on the outline</td><td>\(\Delta u = 0\) on the outline</td></tr>
+<tr><td>User input</td><td>none (regions, layering)</td><td>factors \(f_k\), anchors, weight \(w\)</td></tr>
+<tr><td>Linear solves</td><td>one per reconstruction</td><td>one factorization per landmark change, one back-substitution per drag</td></tr>
+<tr><td>Square root</td><td>\(h = \operatorname{sgn}(z)\sqrt{|z|}\)</td><td>same, after undoing it: \(u_0 = \operatorname{sgn}(h_0)\,h_0^2\)</td></tr>
+<tr><td>No landmarks</td><td>&mdash;</td><td>\(\Delta u = 0\): exactly Monster Mash</td></tr>
+</table>
+<p><strong>Global-constant baseline.</strong> Restricting \(\Delta p = (\alpha - 1)\,p_0\) (one degree of freedom) gives \(u = \alpha\, u_0\), so every height scales by \(\sqrt{\alpha}\). This is the one-dimensional representation the full solve is compared against in RQ1.</p>
+
+<h2>4. Caveats of the current formulation</h2>
+<ol>
+<li><strong>Interpolation mismatch.</strong> Constraints act on the interpolated \(u\), while the displayed height inside a triangle is the interpolated \(\sqrt{\cdot}\); \(\sqrt{b_k^{\top} u} \ne b_k^{\top} \sqrt{u}\) in general. They agree exactly at vertices.</li>
+<li><strong>No positivity.</strong> Biharmonic solutions have no maximum principle and can overshoot. Conflicting nearby landmarks can push \(u\) through zero, after which the square root flips part of the sheet (the likely cause of the observed fold). A fix is an inequality constraint such as \(\operatorname{sgn}(u_0)\, u \ge 0\) or \(p \ge 0\), which turns the solve into a QP.</li>
+<li><strong>Outline rows couple front and back.</strong> \(Q = L^{\top} M^{-1} L\) also penalizes \(\Delta p\) at outline vertices, whose Laplacian rows sum neighbours on both sheets, so a front edit can slightly affect the back near the silhouette. Dropping or treating those rows separately is the boundary-condition choice discussed by Stein et al. 2018.</li>
+</ol>
+
+<h2>References</h2>
+<ul class="refs">
+<li>Dvoro&#382;&#328;&aacute;k et al. Monster Mash: A Single-View Approach to Casual 3D Modeling and Animation. ACM TOG 39(6), 2020.</li>
+<li>S&yacute;kora et al. Ink-and-Ray: Bas-Relief Meshes for Adding Global Illumination Effects to Hand-Drawn Characters. ACM TOG 2014.</li>
+<li>Zhang, Dugas-Phocion, Samson, Seitz. Single-View Modeling of Free-Form Scenes. CVPR 2001.</li>
+<li>Botsch, Kobbelt. An Intuitive Framework for Real-Time Freeform Modeling. SIGGRAPH 2004.</li>
+<li>Jacobson, Tosun, Sorkine, Zorin. Mixed Finite Elements for Variational Surface Modeling. SGP 2010.</li>
+<li>Stein, Grinspun, Wardetzky, Jacobson. Natural Boundary Conditions for Smoothing in Geometry Processing. ACM TOG 2018.</li>
+<li>Sch&ouml;lkopf, Herbrich, Smola. A Generalized Representer Theorem. COLT 2001.</li>
+</ul>
+<p class="note">Reference venues were listed from memory; verify before citing.</p>
+
+</body>
+</html>
