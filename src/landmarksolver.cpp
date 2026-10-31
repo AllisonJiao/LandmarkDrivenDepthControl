@@ -6,8 +6,11 @@
 
 #include <chrono>
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <set>
+
+#include "json.hpp"
 
 using namespace std;
 using namespace Eigen;
@@ -31,7 +34,7 @@ void LandmarkSolver::prepare(const MatrixXd &VDefault, const MatrixXi &F,
   // operators of the flat mesh, as in the inflation step of reconstruction()
   MatrixXd VFlat = VDefault;
   VFlat.col(2).setZero();
-  SparseMatrix<double> L, M, Minv;
+  SparseMatrix<double> Minv;
   igl::cotmatrix(VFlat, F, L);
   igl::massmatrix(VFlat, F, igl::MASSMATRIX_TYPE_VORONOI, M);
   igl::invert_diag(M, Minv);
@@ -112,4 +115,49 @@ bool LandmarkSolver::solve(const vector<Landmark> &lms, MatrixXd &VRestOut) {
   cout << "landmark solve: " << ms << " ms (" << n << " vertices, "
        << lms.size() << " landmarks)" << endl;
   return true;
+}
+
+bool LandmarkSolver::exportScene(const string &path,
+                                 const vector<Landmark> &lms) const {
+  if (!ready) return false;
+  using nlohmann::json;
+
+  json V = json::array();
+  for (int i = 0; i < VDefault.rows(); i++)
+    V.push_back({VDefault(i, 0), VDefault(i, 1), VDefault(i, 2)});
+  json Fj = json::array();
+  for (int i = 0; i < F.rows(); i++) Fj.push_back({F(i, 0), F(i, 1), F(i, 2)});
+
+  json Li = json::array(), Lj = json::array(), Lv = json::array();
+  for (int k = 0; k < L.outerSize(); k++)
+    for (SparseMatrix<double>::InnerIterator it(L, k); it; ++it) {
+      Li.push_back(it.row());
+      Lj.push_back(it.col());
+      Lv.push_back(it.value());
+    }
+  const VectorXd Mdiag = M.diagonal();
+
+  json landmarks = json::array();
+  for (const Landmark &lm : lms)
+    landmarks.push_back({{"face", lm.faceId},
+                         {"bary", {lm.bary(0), lm.bary(1), lm.bary(2)}},
+                         {"factor", lm.factor},
+                         {"side", lm.side},
+                         {"anchor", lm.anchor},
+                         {"baseHeight", lm.baseHeight}});
+
+  json scene = {{"version", 1},
+                {"V", V},
+                {"F", Fj},
+                {"fixed", vector<int>(fixedIdx.data(),
+                                      fixedIdx.data() + fixedIdx.size())},
+                {"L", {{"i", Li}, {"j", Lj}, {"v", Lv}}},
+                {"M", vector<double>(Mdiag.data(),
+                                     Mdiag.data() + Mdiag.size())},
+                {"landmarks", landmarks}};
+
+  ofstream out(path);
+  if (!out) return false;
+  out << scene.dump();
+  return out.good();
 }

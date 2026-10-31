@@ -52,6 +52,14 @@ $('#buttonImportBackgroundImage').change(function() {
     $('#buttonShowBackgroundImage').prop('checked', true);
   });
 });
+$('#dropdownExportSdsScene').click(function() {
+  Module._exportSdsScene();
+});
+$('#buttonImportSdsResult').change(function() {
+  importFile(this, "/tmp/mm_sds_result.json", function() {
+    if (!Module._importSdsResult()) alert('SDS result does not match the current sketch.');
+  });
+});
 
 // function for C with JS interaction
 function js_reconstructionFinished() {
@@ -67,6 +75,15 @@ function js_projectSaved() {
   const content = FS.readFile("/tmp/mm_project.zip");
   var blob = new Blob([content], {type: "application/zip" });
   saveAs(blob, "mm_project.zip");
+}
+function js_sdsSceneExported(ok) {
+  if (!ok) {
+    alert('Inflate the sketch before exporting for SDS.');
+    return;
+  }
+  const content = FS.readFile("/tmp/mm_sds_scene.json");
+  var blob = new Blob([content], {type: "application/json" });
+  saveAs(blob, "mm_sds_scene.json");
 }
 function js_projectOpened() {
   resetToModuleState();

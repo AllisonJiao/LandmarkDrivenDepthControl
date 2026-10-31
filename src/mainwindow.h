@@ -67,6 +67,10 @@ class MainWindow : public MyWindow {
   int getNumberOfLayers();
   void moveSelectedLayersInDepth(int step, bool overlapping);
   void setLandmarkWeight(double weight);
+  // score distillation round trip: the scene goes out to the sds/ tool and
+  // its optimized heights come back as the new default shape
+  bool exportSdsScene(const std::string &path);
+  bool importSdsResult(const std::string &path);
 
   // animation
   void offsetSelectedCpAnimsByFrames(double offset);

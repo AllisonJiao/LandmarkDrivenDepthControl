@@ -1,0 +1,4 @@
+runs/
+__pycache__/
+check_views.png
+test_*.json

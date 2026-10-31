@@ -21,6 +21,9 @@
 #include <miscutils/camera.h>
 #include <shaderMatcap/shaderMatcap.h>
 
+#include <fstream>
+
+#include "json.hpp"
 #include "loadsave.h"
 #include "macros.h"
 #include "reconstruction.h"
@@ -1515,6 +1518,57 @@ void MainWindow::rebuildDeformationEngine() {
 void MainWindow::setLandmarkWeight(double weight) {
   landmarkWeight = weight;
   onLandmarksChanged();
+}
+
+bool MainWindow::exportSdsScene(const std::string &path) {
+  if (!landmarkSolver.isReady()) return false;
+  return landmarkSolver.exportScene(path, landmarkData.items);
+}
+
+bool MainWindow::importSdsResult(const std::string &path) {
+  // a later reconstruction would overwrite the imported shape right away
+  if (!landmarkSolver.isReady() || !manipulationMode.isGeometryModeActive())
+    return false;
+  const MatrixXd &VDefault = landmarkSolver.defaultMesh();
+  const int n = VDefault.rows();
+
+  // parse without exceptions: the web build doesn't enable exception catching
+  ifstream in(path);
+  if (!in) return false;
+  const nlohmann::json res = nlohmann::json::parse(in, nullptr, false);
+  if (!res.is_object()) return false;
+  const auto nj = res.find("n"), xy = res.find("xy"), hj = res.find("h");
+  if (nj == res.end() || xy == res.end() || hj == res.end()) return false;
+  if (!nj->is_number() || nj->get<double>() != n || !xy->is_array() ||
+      xy->size() != n || !hj->is_array() || hj->size() != n)
+    return false;
+
+  // the result must belong to this exact rest mesh: same vertices in the
+  // same order, only z changed
+  VectorXd h(n);
+  for (int i = 0; i < n; i++) {
+    const nlohmann::json &p = (*xy)[i], &z = (*hj)[i];
+    if (!p.is_array() || p.size() != 2 || !p[0].is_number() ||
+        !p[1].is_number() || !z.is_number())
+      return false;
+    if (abs(p[0].get<double>() - VDefault(i, 0)) > 1e-3 ||
+        abs(p[1].get<double>() - VDefault(i, 1)) > 1e-3)
+      return false;
+    h(i) = z.get<double>();
+    if (!isfinite(h(i))) return false;
+  }
+
+  MatrixXd V = VDefault;
+  V.col(2) = h;
+  landmarkSolver.prepare(V, mesh.F, defEng.bnds);
+  // the landmarks now measure from the imported shape, so factor 1 keeps it
+  for (auto &lm : landmarkData.items) lm.factor = 1;
+  rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F);
+  // with no landmarks this still applies the new default mesh (solve()
+  // returns it unchanged) and rebuilds ARAP outside LANDMARK_MODE
+  onLandmarksChanged();
+  selectLandmark(-1);  // rebinding dropped the selection
+  return true;
 }
 
 void MainWindow::drawLine(const MyMouseEvent &event, int x1, int y1, int x2,
