@@ -159,6 +159,7 @@ function resetToModuleState() {
   $('#buttonRotate').removeClass('active');
   if (Module._isMiddleMouseSimulationEnabled()) $('#buttonRotate').addClass('active');
   $('#buttonShowControlPins').prop('checked', Module._getCPsVisibility());
+  $('#buttonShowWireframe').prop('checked', Module._getWireframeVisibility());
   $('#buttonShowTemplateImage').prop('checked', Module._getTemplateImageVisibility());
   $('#buttonShowBackgroundImage').prop('checked', Module._getBackgroundImageVisibility());
   $('#buttonUseTextureShading').prop('checked', Module._isTextureShadingEnabled());
@@ -190,6 +191,7 @@ $(window).keydown(function(e) {
   if (e.which === 32) $('input[name=buttonPlayPause]').not(':checked').click();
   if (e.which === 69) $('#buttonRecord').click();
   if (e.which === 72) $('#buttonShowControlPins').click();
+  if (e.which === 71) $('#buttonShowWireframe').click();
   if (e.ctrlKey && e.which === 79) $('#buttonOpenProject').click();
   if (e.ctrlKey && e.which === 83) $('#buttonSaveProject').click();
   if (e.ctrlKey && e.which === 67) Module._copySelectedAnim();
@@ -335,6 +337,9 @@ $('#buttonResetView').click(function() {
 });
 $('#buttonShowControlPins').change(function() {
   Module._setCPsVisibility(this.checked);
+});
+$('#buttonShowWireframe').change(function() {
+  Module._setWireframeVisibility(this.checked);
 });
 $('#buttonRecord').click(function() {
   Module._cpRecordingRequestOrCancel();

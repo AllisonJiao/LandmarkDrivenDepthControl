@@ -57,8 +57,8 @@ typedef enum {
 } AnimMode;
 
 struct GLData {
-  GLMeshData meshData;
-  GLuint shaderMatcap, shaderTexture;
+  GLMeshData meshData, wireData;
+  GLuint shaderMatcap, shaderTexture, shaderFlatColor;
   std::vector<GLuint> textureNames;
   GLuint templateImgTexName, textureImgTexName[4];
   GLuint backgroundImgTexName;
@@ -71,6 +71,7 @@ struct ShadingOptions {
   int matcapImg = 0;
   bool showTemplateImg = false;
   bool showBackgroundImg = false;
+  bool showWireframe = true;
   bool useNormalSmoothing = true;
   int normalSmoothingIters = 20;
   double normalSmoothingStep = 0.01;

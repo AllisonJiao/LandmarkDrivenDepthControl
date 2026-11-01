@@ -41,6 +41,8 @@ class MainWindow : public MyWindow {
   bool isTextureShadingEnabled();
   void setCPsVisibility(bool visible);
   bool getCPsVisibility();
+  void setWireframeVisibility(bool visible);
+  bool getWireframeVisibility();
   ManipulationMode openProject(const std::string &zipFn,
                                bool changeMode = true);
   void saveProject(const std::string &zipFn);
@@ -310,6 +312,8 @@ class MainWindow : public MyWindow {
 
   // opengl
   GLData glData;
+  // wireframe overlay: edges of wireFaces, rebuilt when the faces change
+  Eigen::MatrixXi wireFaces, wireEdges;
 
   // visualization
   bool use3DCPVisualization = false;

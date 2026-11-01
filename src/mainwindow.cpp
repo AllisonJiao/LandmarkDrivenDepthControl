@@ -15,6 +15,7 @@
 #include "mainwindow.h"
 
 #include <igl/cotmatrix.h>
+#include <igl/edges.h>
 #include <igl/per_vertex_normals.h>
 #include <igl/writeOBJ.h>
 #include <image/imageUtils.h>
@@ -27,6 +28,7 @@
 #include "loadsave.h"
 #include "macros.h"
 #include "reconstruction.h"
+#include "shaderFlatColor.h"
 #include "shaderTextureVertexCoords.h"
 
 using namespace std;
@@ -56,7 +58,10 @@ MainWindow::~MainWindow() { destroyOpenGL(); }
 void MainWindow::initOpenGL() {
   // opengl
   GLMeshInitBuffers(glData.meshData);
+  GLMeshInitBuffers(glData.wireData);
   glData.shaderMatcap = loadShaders(SHADERMATCAP_VERT, SHADERMATCAP_FRAG);
+  glData.shaderFlatColor =
+      loadShaders(SHADERFLATCOLOR_VERT, SHADERFLATCOLOR_FRAG);
   glData.shaderTexture =
       loadShaders(SHADERTEXVERTCOORDS_VERT, SHADERTEXVERTCOORDS_FRAG);
   deque<string> textureFns{
@@ -67,7 +72,10 @@ void MainWindow::initOpenGL() {
     glBindTexture(GL_TEXTURE_2D, glData.textureNames[shadingOpts.matcapImg]);
 }
 
-void MainWindow::destroyOpenGL() { GLMeshDestroyBuffers(glData.meshData); }
+void MainWindow::destroyOpenGL() {
+  GLMeshDestroyBuffers(glData.meshData);
+  GLMeshDestroyBuffers(glData.wireData);
+}
 
 bool MainWindow::paintEvent() {
   if (!repaint) {
@@ -483,7 +491,29 @@ void MainWindow::drawModelOpenGL(Eigen::MatrixXd &V, Eigen::MatrixXd &Vr,
                        glData.M.inverse().transpose());
   GLMeshFillBuffers(activeShader, glData.meshData, V, F, N, textureCoords, C,
                     PARTID);
+  // push the faces slightly back so the wireframe lines win the depth test
+  if (shadingOpts.showWireframe) {
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(1, 1);
+  }
   GLMeshDraw(glData.meshData, GL_TRIANGLES);
+  glDisable(GL_POLYGON_OFFSET_FILL);
+
+  if (shadingOpts.showWireframe) {
+    if (wireFaces.rows() != F.rows() || wireFaces.cols() != F.cols() ||
+        wireFaces != F) {
+      wireFaces = F;
+      igl::edges(F, wireEdges);
+    }
+    const GLuint shader = glData.shaderFlatColor;
+    glUseProgram(shader);
+    uploadCameraMatrices(shader, glData.P, glData.M,
+                         glData.M.inverse().transpose());
+    glUniform4f(glGetUniformLocation(shader, "color"), 0.1, 0.1, 0.1, 0.35);
+    GLMeshFillBuffers(shader, glData.wireData, V, wireEdges, MatrixXd(),
+                      MatrixXd(), MatrixXd(), MatrixXi());
+    GLMeshDraw(glData.wireData, GL_LINES);
+  }
 }
 
 void MainWindow::cpVisualize2D(MyPainter &screenPainter) {
@@ -697,6 +727,9 @@ void MainWindow::keyPressEvent(const MyKeyEvent &keyEvent) {
   }
   if (keyEvent.key == SDLK_h) {
     setCPsVisibility(!getCPsVisibility());
+  }
+  if (keyEvent.key == SDLK_g) {
+    setWireframeVisibility(!getWireframeVisibility());
   }
   if (keyEvent.key == SDLK_j) {
     setTemplateImageVisibility(!getTemplateImageVisibility());
@@ -1429,7 +1462,7 @@ void MainWindow::handleMousePressEventLandmarkMode(const MyMouseEvent &event) {
 
   Landmark lm;
   if (!pickLandmark(VCurr, landmarkSolver.defaultMesh(), Faces, proj3DView,
-                    mouseCurrPos, lm)) {
+                    mouseCurrPos, landmarkData.fixed, lm)) {
     selectLandmark(-1);
     return;
   }
@@ -1563,7 +1596,8 @@ bool MainWindow::importSdsResult(const std::string &path) {
   landmarkSolver.prepare(V, mesh.F, defEng.bnds);
   // the landmarks now measure from the imported shape, so factor 1 keeps it
   for (auto &lm : landmarkData.items) lm.factor = 1;
-  rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F);
+  rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F,
+                  defEng.bnds);
   // with no landmarks this still applies the new default mesh (solve()
   // returns it unchanged) and rebuilds ARAP outside LANDMARK_MODE
   onLandmarksChanged();
@@ -1872,7 +1906,8 @@ void MainWindow::changeManipulationMode(
       proj3DView = proj3DViewInv = Matrix4d::Identity();
 
       landmarkSolver.prepare(mesh.VRest, mesh.F, defEng.bnds);
-      rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F);
+      rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F,
+                      defEng.bnds);
       if (!landmarkData.items.empty()) onLandmarksChanged();
 
     } else {
@@ -2490,6 +2525,13 @@ void MainWindow::setCPsVisibility(bool visible) {
 }
 
 bool MainWindow::getCPsVisibility() { return cpData.showControlPoints; }
+
+void MainWindow::setWireframeVisibility(bool visible) {
+  shadingOpts.showWireframe = visible;
+  repaint = true;
+}
+
+bool MainWindow::getWireframeVisibility() { return shadingOpts.showWireframe; }
 
 ManipulationMode MainWindow::openProject(const std::string &zipFn,
                                          bool changeMode) {

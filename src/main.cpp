@@ -85,6 +85,14 @@ EMSCRIPTEN_KEEPALIVE bool getCPsVisibility() {
   return mainWindow.getCPsVisibility();
 }
 
+EMSCRIPTEN_KEEPALIVE void setWireframeVisibility(bool visible) {
+  mainWindow.setWireframeVisibility(visible);
+}
+
+EMSCRIPTEN_KEEPALIVE bool getWireframeVisibility() {
+  return mainWindow.getWireframeVisibility();
+}
+
 EMSCRIPTEN_KEEPALIVE bool isAnimationPlaying() {
   return mainWindow.isAnimationPlaying();
 }
