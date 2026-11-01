@@ -9,6 +9,7 @@
 using namespace std;
 using namespace Eigen;
 
+bool snapToVertex = true;
 namespace {
 
 Vector2d projectPoint(const Matrix4d &proj, const Vector3d &p) {
@@ -48,7 +49,8 @@ Vector3d blend(const MatrixXd &V, const MatrixXi &F, int face,
 
 bool pickLandmark(const MatrixXd &VCurr, const MatrixXd &VRest,
                   const MatrixXi &F, const Matrix4d &proj,
-                  const Vector2d &mouse, Landmark &out) {
+                  const Vector2d &mouse, const vector<bool> &fixed,
+                  Landmark &out) {
   if (VCurr.rows() == 0 || VRest.rows() != VCurr.rows()) return false;
   const MatrixXd VProj =
       (VCurr.rowwise().homogeneous() * proj.transpose()).rowwise().hnormalized();
@@ -58,10 +60,13 @@ bool pickLandmark(const MatrixXd &VCurr, const MatrixXd &VRest,
       faceWithBary(VProj, F, mouse(0), mouse(1), false, false, bary);
   if (face == -1) return false;
 
-  const Vector3d rest = blend(VRest, F, face, bary);
   out = Landmark();
   out.faceId = face;
   out.bary = bary;
+  if (snapToVertex && !snapLandmarkToVertex(out, VRest, F, fixed))
+    return false;
+
+  const Vector3d rest = blend(VRest, F, face, out.bary);
   out.sketchPos = rest.head(2);
   out.side = rest(2) >= 0 ? 1 : -1;
   out.baseHeight = abs(rest(2));
@@ -119,7 +124,11 @@ void dragLandmark(Landmark &lm, const MatrixXd &VDefault, const MatrixXi &F,
 }
 
 void rebindLandmarks(LandmarkData &data, const MatrixXd &VRest,
-                     const MatrixXi &F) {
+                     const MatrixXi &F, const vector<vector<int>> &bnds) {
+  data.fixed.assign(VRest.rows(), false);
+  for (const auto &bnd : bnds)
+    for (int i : bnd) data.fixed[i] = true;
+
   vector<Landmark> kept;
   for (Landmark lm : data.items) {
     // The rest mesh is viewed orthographically from the sketch plane; front
@@ -145,6 +154,8 @@ void rebindLandmarks(LandmarkData &data, const MatrixXd &VRest,
     lm.faceId = bestFace;
     lm.bary = bestBary;
     lm.baseHeight = bestHeight;
+    if (snapToVertex && !snapLandmarkToVertex(lm, VRest, F, data.fixed))
+      continue;
     kept.push_back(lm);
   }
   data.items = kept;
@@ -180,3 +191,27 @@ void drawLandmarks(const LandmarkData &data, const MatrixXd &V,
     }
   }
 }
+
+bool snapLandmarkToVertex(Landmark &lm, const Eigen::MatrixXd &VRest,
+                          const Eigen::MatrixXi &F,
+                          const std::vector<bool> &fixed) {
+  // Dev-only: Find the vertex of the face with the largest barycentric weight,
+  // skipping vertices the solver holds fixed (a handle there can't move)
+  int maxIndex = -1;
+  for (int i = 0; i < 3; ++i) {
+    const int v = F(lm.faceId, i);
+    if (v < fixed.size() && fixed[v]) continue;
+    if (maxIndex == -1 || lm.bary(i) > lm.bary(maxIndex)) maxIndex = i;
+  }
+  if (maxIndex == -1) return false;
+
+  // Update the landmark's barycentric weights to snap to the vertex
+  lm.bary = Eigen::Vector3d::Zero();
+  lm.bary(maxIndex) = 1.0;
+
+  // Update the sketch position to the vertex position
+  lm.sketchPos = VRest.row(F(lm.faceId, maxIndex)).head(2);
+  lm.baseHeight = std::abs(VRest(F(lm.faceId, maxIndex), 2));
+  return true;
+}
+

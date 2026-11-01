@@ -10,6 +10,8 @@
 
 #include "mypainter.h"
 
+extern bool snapToVertex;
+
 struct Landmark {
   Eigen::Vector2d sketchPos;  // x,y on the rest mesh, used to re-attach
   int side = 1;               // sign of rest z, keeps it on the same sheet
@@ -24,14 +26,20 @@ struct LandmarkData {
   std::vector<Landmark> items;
   int selected = -1;
   bool dragging = false;
+  // per vertex of the rest mesh: true if the solver holds its depth fixed
+  // (part outlines); set by rebindLandmarks
+  std::vector<bool> fixed;
 };
 
 // Picks the front-most face under the screen position `mouse` (the model is
 // projected with `proj`) and fills the landmark's attachment data. Heights
 // are taken from the rest mesh `VRest`, which shares faces with `VCurr`.
+// With snapping on, the landmark goes to a corner that is not `fixed`; the
+// pick fails if the face has no such corner.
 bool pickLandmark(const Eigen::MatrixXd &VCurr, const Eigen::MatrixXd &VRest,
                   const Eigen::MatrixXi &F, const Eigen::Matrix4d &proj,
-                  const Eigen::Vector2d &mouse, Landmark &out);
+                  const Eigen::Vector2d &mouse, const std::vector<bool> &fixed,
+                  Landmark &out);
 
 // Point on the (possibly deformed) surface V at the landmark.
 Eigen::Vector3d surfacePoint(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
@@ -62,12 +70,21 @@ void dragLandmark(Landmark &lm, const Eigen::MatrixXd &VDefault,
                   const Eigen::Vector2d &mouse);
 
 // Re-attaches landmarks to a newly reconstructed rest mesh by their sketch
-// position; landmarks that fall outside the new shape are removed.
+// position; landmarks that fall outside the new shape are removed. `bnds`
+// are the vertices the solver holds fixed and fill `data.fixed`.
 void rebindLandmarks(LandmarkData &data, const Eigen::MatrixXd &VRest,
-                     const Eigen::MatrixXi &F);
+                     const Eigen::MatrixXi &F,
+                     const std::vector<std::vector<int>> &bnds);
 
 void drawLandmarks(const LandmarkData &data, const Eigen::MatrixXd &V,
                    const Eigen::MatrixXd &VDefault, const Eigen::MatrixXi &F, const Eigen::Matrix4d &proj,
                    MyPainter &painter);
+
+// Rounds the landmark's barycentric weights to the closest corner of its face.
+// This method is for intermediate testing, so that manipulation happens only on vertices. In actual deployment should resort to barycentric weight interpolation
+// Corners marked in `fixed` are skipped; returns false if all three are fixed.
+bool snapLandmarkToVertex(Landmark &lm, const Eigen::MatrixXd &VRest,
+                          const Eigen::MatrixXi &F,
+                          const std::vector<bool> &fixed);
 
 #endif  // LANDMARKS_H
