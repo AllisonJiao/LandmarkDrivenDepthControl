@@ -40,10 +40,10 @@ void LandmarkSolver::prepare(const MatrixXd &VDefault, const MatrixXi &F,
                              const vector<vector<int>> &bnds) {
   this->VDefault = VDefault;
   this->F = F;
-  ready = factored = false;
+  ready = factored = solveOk = false;
   numConstraints = 0;
-  du.resize(0); isFixed.clear();
-  dp.resize(0);
+  isFixed.clear();
+  du = dp = duOut = dpOut = dhOut = VectorXd::Zero(VDefault.rows());
   if (VDefault.rows() == 0 || F.rows() == 0) return;
 
   // operators of the flat mesh, as in the inflation step of reconstruction()
@@ -65,6 +65,7 @@ void LandmarkSolver::prepare(const MatrixXd &VDefault, const MatrixXi &F,
 
   const VectorXd h = VDefault.col(2);
   u0 = h.array().sign() * h.array().square();
+  sheetSign = u0.array().sign();
 
   set<int> fixedSet;
   for (const auto &bnd : bnds)
@@ -218,8 +219,13 @@ bool LandmarkSolver::setConstraintsBaseline(const vector<Landmark> &lms) {
 bool LandmarkSolver::solve(const vector<Landmark> &lms, MatrixXd &VRestOut) {
   VRestOut = VDefault;
   const int n = VDefault.rows();
-  du = dp = VectorXd::Zero(n);
-  if (!ready || lms.empty()) return true;  // default inflation
+  du = dp = duOut = dpOut = dhOut = VectorXd::Zero(n);
+  solveOk = false;
+  if (!ready) return true;  // no mesh to solve on
+  if (lms.empty()) {        // default inflation
+    solveOk = true;
+    return true;
+  }
   if (!factored || lms.size() != numConstraints) return false;
 
   const auto tStart = chrono::high_resolution_clock::now();
@@ -240,6 +246,13 @@ bool LandmarkSolver::solve(const vector<Landmark> &lms, MatrixXd &VRestOut) {
 
   const VectorXd u = u0 + du;
   VRestOut.col(2) = u.array().sign() * u.array().abs().sqrt();
+
+  // the contract's outward-positive fields: on each sheet thickening raises
+  // |u|, so du has the sign of u0 and dp the opposite one
+  duOut = sheetSign.cwiseProduct(du);
+  dpOut = -sheetSign.cwiseProduct(dp);
+  dhOut = sheetSign.cwiseProduct(VRestOut.col(2) - VDefault.col(2));
+  solveOk = true;
 
   const double ms = chrono::duration<double, milli>(
                         chrono::high_resolution_clock::now() - tStart)
@@ -333,9 +346,14 @@ VectorXd LandmarkSolver::implied(const VectorXd &du) const {
 }
 
 bool LandmarkSolver::exportScene(const string &path,
-                                 const vector<Landmark> &lms) const {
+                                 const vector<Landmark> &lms,
+                                 const string &meshName,
+                                 double inflationAmount) const {
   if (!ready) return false;
   using nlohmann::json;
+  auto list = [](const VectorXd &v) {
+    return vector<double>(v.data(), v.data() + v.size());
+  };
 
   json V = json::array();
   for (int i = 0; i < VDefault.rows(); i++)
@@ -361,20 +379,34 @@ bool LandmarkSolver::exportScene(const string &path,
                          {"anchor", lm.anchor},
                          {"baseHeight", lm.baseHeight}});
 
-  json scene = {{"version", 1},
+  const VectorXd u = u0 + du;
+  const VectorXd h = u.array().sign() * u.array().abs().sqrt();
+
+  json scene = {{"version", 2},
+                {"mesh_name", meshName},
                 {"V", V},
                 {"F", Fj},
                 {"fixed", vector<int>(fixedIdx.data(),
                                       fixedIdx.data() + fixedIdx.size())},
                 {"L", {{"i", Li}, {"j", Lj}, {"v", Lv}}},
-                {"M", vector<double>(Mdiag.data(),
-                                     Mdiag.data() + Mdiag.size())},
+                {"M", list(Mdiag)},
+                {"component", vector<int>(sheetLabels.data(),
+                                          sheetLabels.data() + sheetLabels.size())},
+                {"mean_edge", meanEdge},
+                {"c", inflationAmount},
                 {"landmarks", landmarks},
+                // the last solve: method, its settings, and whether it succeeded
                 {"method", handleMethodName(method)},
                 {"radius", radiusEdges},  // in mean edge lengths
                 {"radius_px", falloffRadiusPixels()},
-                {"du", vector<double>(du.data(), du.data() + du.size())},
-                {"dp", vector<double>(dp.data(), dp.data() + dp.size())}};
+                {"weight", isinf(weight) ? json(nullptr) : json(weight)},  // null = hard
+                {"ok", solveOk},
+                {"h", list(h)},
+                {"du", list(du)},
+                {"dp", list(dp)},
+                {"du_out", list(duOut)},
+                {"dp_out", list(dpOut)},
+                {"dh_out", list(dhOut)}};
 
   ofstream out(path);
   if (!out) return false;

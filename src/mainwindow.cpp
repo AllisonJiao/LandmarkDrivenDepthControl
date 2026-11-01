@@ -1542,9 +1542,11 @@ void MainWindow::setFalloffRadius(double edges) {
   onLandmarksChanged();
 }
 
-bool MainWindow::exportSdsScene(const std::string &path) {
+bool MainWindow::exportSdsScene(const std::string &path,
+                                const std::string &meshName) {
   if (!landmarkSolver.isReady()) return false;
-  return landmarkSolver.exportScene(path, landmarkData.items);
+  return landmarkSolver.exportScene(path, landmarkData.items, meshName,
+                                    defaultInflationAmount);
 }
 
 bool MainWindow::importSdsResult(const std::string &path) {

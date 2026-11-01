@@ -71,9 +71,10 @@ class LandmarkSolver {
 
   // Writes the default mesh, the flat operators L and M, the outline
   // indices, the landmarks and the fields of the last solve as JSON for the
-  // external tools in sds/.
-  bool exportScene(const std::string &path,
-                   const std::vector<Landmark> &lms) const;
+  // external tools in sds/ (the M1 contract's export; sds/scene.py reads it).
+  // inflationAmount is c, the default pressure that dp is reported against.
+  bool exportScene(const std::string &path, const std::vector<Landmark> &lms,
+                   const std::string &meshName, double inflationAmount) const;
 
   bool isReady() const { return ready; }
   const Eigen::MatrixXd &defaultMesh() const { return VDefault; }
@@ -81,10 +82,20 @@ class LandmarkSolver {
   const Eigen::VectorXi &fixedVertices() const { return fixedIdx; }
   // the same set as one flag per vertex
   const std::vector<bool> &fixedMask() const { return isFixed; }
-  // Fields of the last solve, per vertex: du = change of u = sgn(h) h^2,
-  // dp = implied change of pressure (0 on the outline). Empty before a solve.
+  // Fields of the last solve, per vertex, in the solver's signs: du = change
+  // of u = sgn(h) h^2, dp = implied change of pressure (0 on the outline).
+  // Zero until the first solve after prepare().
   const Eigen::VectorXd &lastDu() const { return du; }
   const Eigen::VectorXd &lastDp() const { return dp; }
+  // The same as the M1 contract reports them, "outward positive": thickening
+  // is positive on both sheets. du * sgn(u0), dp * -sgn(u0), and
+  // dh = sgn(h0) (h - h0), so a sheet crossing shows as a large negative dh.
+  const Eigen::VectorXd &lastDuOutward() const { return duOut; }
+  const Eigen::VectorXd &lastDpOutward() const { return dpOut; }
+  const Eigen::VectorXd &lastDhOutward() const { return dhOut; }
+  // false until the first solve after prepare() and after a failed solve
+  // (rejected landmark, singular setup); the fields are 0 then
+  bool lastSolveOk() const { return solveOk; }
 
  private:
   // P3: factors the KKT system of buildEnergy with the landmark rows B
@@ -123,6 +134,9 @@ class LandmarkSolver {
   double radiusEdges = 4;  // falloff radius R in mean edge lengths
   double meanEdge = 0;     // mean x,y edge length of the rest mesh (prepare)
   Eigen::VectorXd du, dp;  // fields of the last solve
+  Eigen::VectorXd duOut, dpOut, dhOut;  // the same, outward positive
+  Eigen::VectorXd sheetSign;            // sgn(u0) = sgn(h0), 0 on the outline
+  bool solveOk = false;
   std::vector<bool> isFixed;  // per vertex: in fixedIdx
 
   // once per mesh (prepare): the interior vertices, their inverse map (-1 on

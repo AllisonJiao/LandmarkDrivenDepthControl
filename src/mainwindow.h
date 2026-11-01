@@ -73,7 +73,7 @@ class MainWindow : public MyWindow {
   void setFalloffRadius(double edges);
   // score distillation round trip: the scene goes out to the sds/ tool and
   // its optimized heights come back as the new default shape
-  bool exportSdsScene(const std::string &path);
+  bool exportSdsScene(const std::string &path, const std::string &meshName);
   bool importSdsResult(const std::string &path);
 
   // animation

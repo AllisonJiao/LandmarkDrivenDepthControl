@@ -204,8 +204,11 @@ EMSCRIPTEN_KEEPALIVE void saveProject() {
   EM_ASM(js_projectSaved(););
 }
 
-EMSCRIPTEN_KEEPALIVE void exportSdsScene() {
-  const bool ok = mainWindow.exportSdsScene("/tmp/mm_sds_scene.json");
+// meshName (may be null) is written into the scene so runs can be told apart;
+// from JS: Module.ccall('exportSdsScene', null, ['string'], [name])
+EMSCRIPTEN_KEEPALIVE void exportSdsScene(const char *meshName) {
+  const bool ok = mainWindow.exportSdsScene("/tmp/mm_sds_scene.json",
+                                            meshName ? meshName : "");
   EM_ASM({ js_sdsSceneExported($0); }, ok);
 }
 
