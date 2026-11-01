@@ -3,6 +3,7 @@
 #include <igl/cotmatrix.h>
 #include <igl/invert_diag.h>
 #include <igl/massmatrix.h>
+#include <igl/vertex_components.h>
 
 #include <chrono>
 #include <cmath>
@@ -85,6 +86,15 @@ void LandmarkSolver::prepare(const MatrixXd &VDefault, const MatrixXi &F,
     }
   SparseMatrix<double> KII(nI, nI);
   KII.setFromTriplets(triplets.begin(), triplets.end());
+
+  // D2: the sheets are the connected components of the interior, whose edges
+  // are exactly the off-diagonal entries of K_II. Every outline is fixed, so
+  // each part's front and back come out as separate sheets.
+  VectorXi interiorSheet;
+  igl::vertex_components(KII, interiorSheet);
+  sheetLabels = VectorXi::Constant(VDefault.rows(), -1);
+  for (int a = 0; a < nI; a++) sheetLabels(interiorIdx[a]) = interiorSheet(a);
+
   const VectorXd Mdiag = M.diagonal();
   massI.resize(nI);
   for (int a = 0; a < nI; a++) massI(a) = Mdiag(interiorIdx[a]);
@@ -145,11 +155,9 @@ bool LandmarkSolver::setConstraintsBaseline(const vector<Landmark> &lms) {
   // frame and should only rescale what is computed here.
   //
   // Decisions that apply to several methods:
-  // TODO(human) [D2 sheet]: the front and back sheets share x,y, so a disk
-  //   around the handle (G2, P2) also covers the other sheet. Restrict the
-  //   falloff to the handle's sheet, e.g. sign(u0(j)) == lms[k].side for a
-  //   one-part shape, or connected components without the fixed vertices for
-  //   several parts.
+  // [D2 sheet] the front and back sheets share x,y, and so may overlapping
+  //   parts, so a disk around the handle (G2, P2) would cover them too.
+  //   falloff() keeps it on the handle's sheet (sheetLabels, from prepare()).
   // TODO(human) [D3 radius]: `radius` is in canvas pixels, like
   //   VDefault.col(0) and col(1). Its range and default are set by the
   //   #landmarkRadius slider in src/ui/myshell.html.
@@ -178,9 +186,12 @@ bool LandmarkSolver::setConstraintsBaseline(const vector<Landmark> &lms) {
         basis.col(k) = forward(VectorXd::Unit(VDefault.rows(), lms[k].vertexId));
       return factorBasis();
     case HandleMethod::P2:
-      // TODO(human) [P2]: basis dp = falloff w around each handle; fill
-      // basis.col(k) = forward(w_k), then return factorBasis() as P1 does.
-      break;
+      // a smooth pressure bump around each handle instead of P1's spike;
+      // P2 equals P1 when the radius is below one edge
+      basis.resize(VDefault.rows(), lms.size());
+      for (int k = 0; k < lms.size(); k++)
+        basis.col(k) = forward(falloff(lms[k].vertexId));
+      return factorBasis();
     case HandleMethod::P3:
       return false;  // handled by setConstraintsP3()
   }
@@ -253,7 +264,7 @@ bool LandmarkSolver::solveBaseline(const vector<Landmark> &lms,
       break;
     case HandleMethod::P1:
     case HandleMethod::P2: {
-      if (basis.cols() != r.size()) break;  // no basis built (P2 for now)
+      if (basis.cols() != r.size()) break;  // setup built no basis
       // one coefficient per handle (the pressure added there), then
       // du = sum_k alpha_k * basis column k
       const VectorXd alpha = basisLU.solve(r);
@@ -273,6 +284,20 @@ bool LandmarkSolver::factorBasis() {
   const MatrixXd A = B * basis;
   basisLU.compute(A);
   return basisLU.isInvertible();
+}
+
+VectorXd LandmarkSolver::falloff(int v) const {
+  // (1 - t^2)^3 has value, slope and curvature 0 at t = 1, so the bump ends
+  // without a ridge in the pressure. radius and d are in canvas pixels.
+  VectorXd w = VectorXd::Zero(VDefault.rows());
+  for (int j = 0; j < w.size(); j++) {
+    if (sheetLabels(j) != sheetLabels(v)) continue;  // other sheet or fixed
+    const double dx = VDefault(j, 0) - VDefault(v, 0);
+    const double dy = VDefault(j, 1) - VDefault(v, 1);
+    const double t = sqrt(dx * dx + dy * dy) / radius;
+    if (t < 1) w(j) = pow(1 - t * t, 3);
+  }
+  return w;
 }
 
 VectorXd LandmarkSolver::forward(const VectorXd &dp) const {

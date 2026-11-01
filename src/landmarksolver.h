@@ -92,6 +92,9 @@ class LandmarkSolver {
                      Eigen::VectorXd &duOut);
   // factors A = B * basis; false if it is singular
   bool factorBasis();
+  // (1 - (d / radius)^2)^3 on the vertices of v's sheet within radius of v
+  // (x,y distance d), 0 elsewhere; 1 at v. The bump of G2 and P2.
+  Eigen::VectorXd falloff(int v) const;
 
   // Pressure -> displacement: du = L_II^-1 M_II dp on the interior vertices,
   // 0 on the fixed ones. dp and the result have one entry per vertex.
@@ -123,6 +126,9 @@ class LandmarkSolver {
   Eigen::VectorXi toInterior;
   Eigen::VectorXd massI;
   Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> ldlt;
+  // per vertex: its sheet, a connected component of the interior (each part's
+  // front and back are separate sheets), -1 on the fixed vertices
+  Eigen::VectorXi sheetLabels;
 
   // once per landmark set (setConstraintsBaseline), read on every drag frame:
   // one column of du per handle (n x k; P1: forward(e_v)), and the LU of
