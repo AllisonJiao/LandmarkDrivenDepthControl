@@ -145,9 +145,9 @@ bool LandmarkSolver::setConstraints(const vector<Landmark> &lms,
   B = SparseMatrix<double>(lms.size(), n);
   B.setFromTriplets(triplets.begin(), triplets.end());
 
-  // TODO(human) [D6 weight]: the baselines hit their targets exactly by
-  // construction, so `weight` (soft vs hard) only affects P3 here. The UI side
-  // of this decision is in src/ui/main.js (#landmarkMethod handler).
+  // [D6 weight] the baselines hit their targets exactly by construction, so
+  // `weight` (soft vs hard) only affects P3. Hiding the slider for them is
+  // Part B's (src/ui/main.js, #landmarkMethod handler).
   if (method == HandleMethod::P3)
     factored = setConstraintsP3();
   else
@@ -277,9 +277,9 @@ bool LandmarkSolver::solveBaseline(const vector<Landmark> &lms,
                                    const VectorXd &r, VectorXd &duOut) {
   // r(k) is the required change of u at landmark k. duOut arrives as zeros
   // with one entry per vertex and must stay 0 on the fixed vertices.
-  // TODO(human) [D4 signs]: u0 and r are negative on the back sheet
-  //   (lms[k].side == -1). Check that each method moves a back handle away
-  //   from the drawing plane for factors > 1.
+  // [D4 signs] u0 and r are negative on the u0 < 0 sheet; signed u carries
+  //   that through every method, so a handle there also moves away from the
+  //   drawing plane for factors > 1. solve() reports the outward fields.
   switch (method) {
     case HandleMethod::G1:
       // r_k at each handle vertex, 0 elsewhere; B B' = I, so B du = r

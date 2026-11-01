@@ -1,4 +1,4 @@
-# Milestone 1 plan: Landmark-driven depth control (v2.1)
+# Milestone 1 plan: Landmark-driven depth control (v2.2)
 
 > **How to read the change markers**
 > - **[Δn]**: changed in v2. The reason is row *n* of the table below.
@@ -8,6 +8,8 @@
 > - **[v2.1]**: added on 2026-11-01, after the method wiring and vertex
 >   landmarks (D1) were implemented. **[done]** marks plan items that now
 >   exist in the code.
+> - **[v2.2]**: added later on 2026-11-01, after B1–B3, the four baselines and
+>   the amended M1 contract (`docs/M1_contract.md`) were implemented.
 >
 > Unmarked text is unchanged from v1.
 
@@ -29,14 +31,14 @@ units).
 
 | # | Change | Why |
 |---|---|---|
-| 1 | **P3 energy uses interior rows only.** Today it sums over every row, including the outline rows (`buildEnergy`, `src/landmarksolver.cpp:23`). | With every row, (a) the solver does not minimize the `dp'M dp` we report: 7.65 vs the true optimum of 5.73. (b) The front and back sheets are coupled: a front handle moves the back sheet by **37 %** of the handle's displacement. (c) The slide claim "dp ∝ L⁻¹Bᵀ" is false for it. |
+| 1 | **P3 energy uses interior rows only.** Today it sums over every row, including the outline rows (`buildEnergy` in `src/landmarksolver.cpp`). | With every row, (a) the solver does not minimize the `dp'M dp` we report: 7.65 vs the true optimum of 5.73. (b) The front and back sheets are coupled: a front handle moves the back sheet by **37 %** of the handle's displacement. (c) The slide claim "dp ∝ L⁻¹Bᵀ" is false for it. |
 | 2 | **Refinement claim corrected.** | P3's *peak* dp grows like log(1/h): in the v1 table 9.6 → 12.1 → 14.4 is about +2.4 per halving. Only its *energy* converges. G2 and P2 at a fixed R also converge. The new claim and the new metric (area moved) are in §3.2. |
 | 3 | **G2 falloff is multiplicative:** `du_j = (k²−1)·u0_j·w(d_ij/R)` | The additive form `r·w` moves outline vertices when the disk crosses the outline, and it can push u below zero for k < 1. Multiplying by `u0` is zero on the outline and keeps `u > 0` for any k > 0. |
 | 4 | **P3-R (region-restricted optimal pressure) moves from future work to Should.** | It has a closed form (§0) and costs about 10 lines on top of the shared helpers. With R = the handle vertex it equals P1 exactly; with R = everything it equals P3. On the same disk it always beats P2 (15.4 vs 21.8 at R = 0.15, 7.9 vs 10.4 at R = 0.3), which is the "why optimization" figure. |
 | 5 | **Falloffs (G2, P2, P3-R) stay on the handle's own sheet.** | The front and back sheets share xy, so a 2D-distance disk also covers the back sheet, and overlapping parts as well. |
 | 6 | **Several handles and anchors in G2/P1/P2/P3-R from day 1** (one k×k solve). | The UI already supports several landmarks and anchors. Single-handle versions would silently ignore anchors. |
 | 7 | **Snapping skips outline vertices and duplicates.** | A handle on a fixed vertex is an infeasible constraint (0 = r). Two handles on one vertex make the KKT system singular. |
-| 8 | **Keys apply to the web build only.** | `keyPressEvent` is desktop-only (`#ifndef __EMSCRIPTEN__`, `src/mainwindow.cpp:653`), and the desktop build is not set up. `+`/`−` already shift animation frames in `src/ui/main.js:177`, so the factor steps use `[`/`]`. `W` is free on the web. |
+| 8 | **Keys apply to the web build only.** | `keyPressEvent` is desktop-only (`#ifndef __EMSCRIPTEN__`, `src/mainwindow.cpp:653`), and the desktop build is not set up. `+`/`−` already shift animation frames in `src/ui/main.js:213`, so the factor steps use `[`/`]`. `W` is free on the web. |
 | 9 | **Front/back decided: edits are one-sided** (the landmark's own sheet). | This matches the existing per-side factors. With #1 every method is exactly one-sided; the back sheet's du is 0, which is a checkable invariant. |
 | 10 | **The figures come from the existing JSON scene export plus Python**, not a new CSV schema. | `exportScene` already writes V, F, fixed, L, M and the landmarks, and downloads through the Save menu; `sds/scene.py` already loads it. A Python reference implementation of every method lets the figures start before the C++ lands, and it cross-checks the C++. |
 | 11 | **New metric: sheet crossing,** `min sgn(u0)·u`. | No method clamps. A crossing vertex flips to the other side of the drawing plane. It did not occur on the ellipse even at ×0.3. Keep it for multi-part shapes and handles near the outline. |
@@ -44,23 +46,25 @@ units).
 
 ---
 
-## Status, 2026-11-01 **[v2.1]**
+## Status, 2026-11-01 **[v2.2]**
 
-The math for every open item is in **§7**, in the order to implement it.
+Part A (the solver) is done apart from the open items in the last row. The
+agreements with Part B are in **`docs/M1_contract.md`**. §7 keeps the math
+and the test results.
 
 | State | Item | Where |
 |---|---|---|
-| **Done** | Method wiring: `HandleMethod` enum (G1 G2 P1 P2 P3), `setMethod`, the dropdown and R slider, a dispatch into `setConstraintsP3/Baseline` and `solveP3/Baseline`, `lastDu` / `lastDp`, and `method`, `radius`, `du`, `dp` in the export | `landmarksolver.*`, `mainwindow.*`, `main.cpp`, `src/ui/*` |
-| **Done** | **D1 vertex landmarks** with the outline guard (D7) and the duplicate guard (A4); the Python side reads vertex ids | §7.1 |
-| **Done** | `fixedMask()`: the fixed set as one flag per vertex, built in `prepare()` | `landmarksolver.cpp:65` |
-| **Next** | B1 `[prepare]`: interior map, K_II = −L_II, `SimplicialLDLT` | §7.2 |
-| **Next** | B2 / B3 `forward` and `implied`, tested with `implied(forward(e_v)) = e_v` | §7.2 |
-| **Then** | G1 → P1 → P2 with D2 → G2, all through one k×k basis solve | §7.3 |
-| **Then** | Decisions D2, D3, D4, D5, D6 | §7.4 |
-| **Open** | P3 energy over interior rows only (Δ1), still being decided; P3-R; export fields `component` and `h`; figures | §2, §3 |
+| **Done** | Method wiring: `HandleMethod` enum (G1 G2 P1 P2 P3), a dispatch into `setConstraintsP3/Baseline` and `solveP3/Baseline`. **[v2.2]** JS setters `setHandleMethod(int)` and `setFalloffRadius(double)`, with R in mean edge lengths | `landmarksolver.*`, `mainwindow.*`, `main.cpp` |
+| **Done** | **D1 vertex landmarks** with the outline guard (D7) and the duplicate guard (A4); the Python side reads vertex ids. **[v2.2]** `setConstraints` also rejects a `vertexId` of −1, out of range, or on the outline | §7.1 |
+| **Done [v2.2]** | B1–B3: interior map, K_II = −L_II with `SimplicialLDLT`, sheet components, `forward`, `implied` | §7.2 |
+| **Done [v2.2]** | G1, G2, P1, P2 through one k×k basis solve (`factorBasis`, `falloff`) | §7.3 |
+| **Done [v2.2]** | Decisions D2, D3, D4, D5, D7 | §7.4 |
+| **Done [v2.2]** | The amended M1 contract: outward-positive fields, `lastSolveOk()`, scene export version 2 (`component`, `h`, `ok`, …), `Scene.vertex_table()` / `write_vertex_csv()` | `docs/M1_contract.md`, §3.1 |
+| **Part B** | D6 (weight slider), the R slider range, the mesh name for the export, the `Landmark` struct merge, heat map, figures | `docs/M1_contract.md`, §6 |
+| **Open (A)** | P3 energy over interior rows only (Δ1), still being decided; P3-R; refinement data; the C++/Python cross-check | §2, §6 |
 
-Until the four baseline cases are filled in, `setConstraintsBaseline` prints
-"not implemented yet" and the app shows the default inflation for G1–P2.
+All five methods run in the app. On the heart (11,549 vertices) a drag frame
+takes 0.1–0.4 ms for the baselines.
 
 ---
 
@@ -169,7 +173,7 @@ energy levels off"~~ was correct but incomplete.
      matcap or textured.
    - Set `glPolygonOffset` on the fill pass. Where:
      `MainWindow::drawModelOpenGL` (`src/mainwindow.cpp:455`).
-2. **Snap handles to vertices** in `pickLandmark` (`src/landmarks.cpp:49`):
+2. **Snap handles to vertices** in `pickLandmark` (`src/landmarks.cpp:58`):
    **[v2.1 done]**, except the highlight (see §7.1).
    - **[Δ7]** Choose the face corner with the largest barycentric weight that
      is **not fixed**, and reject the pick if all three corners are fixed.
@@ -195,14 +199,18 @@ energy levels off"~~ was correct but incomplete.
 
 ### 2.1 Structure
 - **[Δ4]** Add `enum class HandleMethod { G1, G2, P1, P2, P3R, P3 }` with
-  `setHandleMethod(int)` and **[clarified]** `setHandleRadius(double)`
+  `setHandleMethod(int)` and **[clarified]** ~~`setHandleRadius(double)`~~
+  **[v2.2]** `setFalloffRadius(double)`
   exported next to `setLandmarkWeight` (`src/main.cpp:137`), plus a dropdown
   and an R slider in `myshell.html` / `main.js`.
-  **[v2.1 done]**, without P3R for now. The method and the radius go through
-  a single `setHandleMethod(int method, double radius)`. The R slider shows
-  only for G2 and P2.
-- **[Δ12]** `prepare()` already stores L, M and `fixedIdx`
-  (`src/landmarksolver.cpp:26`). Add:
+  **[v2.1 done]**, without P3R for now. ~~The method and the radius go
+  through a single `setHandleMethod(int method, double radius)`.~~
+  **[v2.2]** Two setters, `setHandleMethod(int)` and
+  `setFalloffRadius(double)`, with R in mean edge lengths (M1 contract). The
+  R slider shows only for G2 and P2.
+- **[Δ12]** `prepare()` already stores L, M and `fixedIdx`. Add
+  (**[v2.2 done]**; the components come from `igl::vertex_components` on
+  K_II and are stored as `sheetLabels`):
   - the interior list and its inverse map, `L_II`, and a `SimplicialLDLT` of
     `−L_II` (SPD);
   - **[Δ5 new]** **sheet components**: connected components of the mesh with
@@ -212,15 +220,18 @@ energy levels off"~~ was correct but incomplete.
   (a one-line change in `buildEnergy`). Keep the every-row version only as an
   optional "P3c" figure about boundary conditions.
 - Helpers: `forward(dp) → du` and `implied(du) → dp`, both with zeros on the
-  fixed set.
-- **[Δ6 new]** **`basisSolve(Φ)`**, shared by P1, P2 and P3-R:
+  fixed set. **[v2.2 done]**
+- **[Δ6 new]** **`basisSolve(Φ)`**, shared by P1, P2 and P3-R
+  (**[v2.2 done]** as `factorBasis()` plus one per-frame case; G2 shares it
+  too, with the column u₀∘w):
   - When the landmark set changes, compute `g = forward(Φ)` (one
     back-substitution per handle).
   - Per drag frame: solve `(B g) α = r` (k×k), then `du = g α`, `dp = Φ α`.
   - This is the same factor-once, back-substitute-per-drag pattern as P3, so
     every method updates live while dragging.
 - Every method writes `VRestOut` (the rest of the pipeline is unchanged) and
-  stores `lastDu` / `lastDp`.
+  stores `lastDu` / `lastDp`. **[v2.2]** Also the outward-positive fields and
+  `lastSolveOk()` (M1 contract).
 
 ### 2.2 Per-method notes
 - **G1:** **[Δ6]** `du = Σ r_k e_{i_k}` over the snapped handles. No solve.
@@ -230,7 +241,8 @@ energy levels off"~~ was correct but incomplete.
   ~~"Apply the falloff in u, not in h"~~: still true; the multiplicative form
   is in u.
 - **P1:** `Φ = eᵢ` per handle. For a non-snapped handle, use `Φ = Σ bⱼ eⱼ`
-  over the face's interior corners.
+  over the face's interior corners. **[v2.2]** Not needed in M1: landmarks
+  are always snapped (M1 contract).
 - **P2:** `Φ_k = w(d/R)` **[Δ5]** on the handle's component. As R → 0 it
   becomes P1.
 - **P3-R:** **[Δ4 new]** `Φ_k = mask_R(L_II⁻¹ B_kᵀ)`, where R is the union of
@@ -257,6 +269,24 @@ energy levels off"~~ was correct but incomplete.
   same exported scene. That projection is an independent implementation of
   interior-row P3.
 
+**[v2.2] Results** on the two-sheet test ellipse (2,424 vertices, mean edge
+6.7 px):
+- Factor 1: du = 0 exactly, every method.
+- Handle error: 0 to about 1e-14 for G1, G2, P1 and P2.
+- `implied(forward(e_v)) = e_v` to 1.3e-15.
+- Net force ≈ 1e-12 for G1 and ≈ 1e-11 for G2 when the disk stays off the
+  outline. When it crosses the outline, the net force equals −Σ (L du) over
+  the outline rows exactly.
+- R below one edge: G2 = G1 and P2 = P1 bit for bit.
+- Front handle: the back sheet's du and dp are exactly 0 for G1, G2, P1 and
+  P2. P3 waits for Δ1.
+- **[new]** The outward fields satisfy K·du_out = M·dp_out to about 1e-16
+  relative, for all five methods.
+- **[new]** Sheet crossing does occur: G2 and P2 with a ×1.0 anchor on the
+  handle's 1-ring reach min u/u₀ = −1.4 (G2) and −1.8 (P2) at R = 7.4 edges.
+  P1 never crosses.
+- Not run yet: C++ P3 vs the Python projection.
+
 ---
 
 ## 3. Result demonstration
@@ -275,6 +305,14 @@ loads it.
 - **[Δ10 new]** `scripts/handle_methods.py` recomputes every method from a
   scene in Python (dense G, as in `sds/pressure.py`). The figures do not wait
   for the C++, and the two implementations check each other.
+
+**[v2.2 done]** `exportScene` writes version 2: `method`, `radius` (mean
+edge lengths), `radius_px`, `weight` (`null` = hard), `ok`, `h`, `du`, `dp`,
+the outward fields `du_out`, `dp_out`, `dh_out`, plus `component`,
+`mean_edge`, `c` and `mesh_name`. In `sds/scene.py`,
+`Scene.vertex_table()` and `write_vertex_csv()` give the per-vertex table
+with the contract's header lines, and a scene with `ok: false` is refused.
+The CSV the M1 contract asks for is generated from this JSON.
 
 ### 3.2 Offline figures, `scripts/plot_handles.py`
 - **Main grid, 2 × 6** **[Δ4]** (G1 G2 P1 P2 P3-R P3; 2 × 5 without P3-R).
@@ -341,13 +379,17 @@ soft weight; the Python pressure model and landmark projection.
 **[v2.1]** Also done: the method dropdown and R slider with their setter;
 vertex landmarks with the outline and duplicate guards (C++ and Python);
 `du`, `dp`, `method` and `radius` in the export.
+**[v2.2]** Also done: B1–B3 with the sheet components; G1, G2, P1 and P2
+through one basis solve; the export fields; the M1 contract's setters,
+outward fields and solve flag.
 
 **Must:**
 - **[Δ1]** interior-row P3 energy, checked against Python;
 - snapping **[Δ7]** with the outline and duplicate guards **[v2.1 done]**;
   wireframe;
-- G1, G2, P1, P2 and P3 **[Δ6]** through `basisSolve`, with du/dp;
-- **[Δ10]** the export fields (~~CSV export~~);
+- G1, G2, P1, P2 and P3 **[Δ6]** through `basisSolve`, with du/dp
+  **[v2.2 done]**;
+- **[Δ10]** the export fields (~~CSV export~~) **[v2.2 done]**;
 - **[Δ10]** the Python reference, 2 × 5 grid, profile and metrics;
 - slides and demo video.
 
@@ -375,12 +417,14 @@ agree on **[Δ10]** **the export fields (§3.1)** (~~CSV schema~~), **[Δ5 new]*
    `project_landmarks` on an exported scene.
 2. Extend `prepare()` with the interior map, the `L_II` LDLT and **[Δ5]** the
    components. Add `forward` / `implied` / **[Δ6]** `basisSolve`.
-   ~~"Commit the CMake fix"~~ **[Δ12]**.
+   ~~"Commit the CMake fix"~~ **[Δ12]**. **[v2.2 done]**
 3. Implement G1, G2, P1, P2 **[Δ4]** (and P3-R), with `lastDu` / `lastDp` for
-   every method, P3 included.
+   every method, P3 included. **[v2.2 done]**, except P3-R.
 4. Add **[Δ10]** the export fields and the JS setters for the method and R.
+   **[v2.2 done]**, as amended in `docs/M1_contract.md`.
 5. Run the sanity checks **[clarified]** (§2.3). Produce the refinement data
-   **[new]** (ellipse resolutions plus `triangleOpts`).
+   **[new]** (ellipse resolutions plus `triangleOpts`). **[v2.2]** Checks
+   done except the C++/Python comparison; refinement data open.
 
 ### Student B: interaction, visualization, presentation
 1. Add the wireframe, snapping **[Δ7]** with its guards, the readout and
@@ -404,15 +448,20 @@ agree on **[Δ10]** **the export fields (§3.1)** (~~CSV schema~~), **[Δ5 new]*
   - B owns `drawModelOpenGL`, `landmarks.*` (picking and snapping),
     `src/ui/*` and **[new]** `third_party/shaderMatcap/`.
   - **[Δ7 new]** Snapping needs `isFixed` from A's solver; agree on that
-    getter on day 1.
+    getter on day 1. **[v2.1 done]**: `fixedMask()`.
+  - **[v2.2]** D1 put the snapping in `landmarks.*` on A's branch, and the M1
+    contract keeps A's snapping logic in the merge (outline check, duplicate
+    rejection, `sketchPos` kept on rebind). B owns the rest of `landmarks.*`
+    and `src/ui/*`.
   - Coordinate the `main.cpp` exports directly.
 
 ---
 
 ## 7. Implementation guide: what is done and the math for what is next **[v2.1]**
 
-Line numbers are as of 2026-11-01. If they have moved, search for the
-`TODO(human) [tag]` comment named in each item.
+**[v2.2]** Everything in §7.1–7.4 is now in the code, and its
+`TODO(human)` tags are gone, so this section names functions instead of line
+numbers. It keeps the math and adds what was measured.
 
 ### 7.0 Notation for this section
 - n vertices. The **fixed set** is `fixedIdx`, or `isFixed` as one flag per
@@ -436,9 +485,9 @@ point inside a face would smear them over three vertices.
 | Change | Where | Role in the algorithm |
 |---|---|---|
 | `vertexId` replaces `faceId` + `bary` | `src/landmarks.h` | One unknown du(vₖ) per handle. G1's column is eᵥ, and P1's column is forward(eᵥ), the response to pressure at one vertex. |
-| Rows of B are e_{vₖ}ᵀ | `setConstraints`, `src/landmarksolver.cpp:89` | B only picks out values: (B u₀)ₖ = u₀(vₖ). The baselines' k×k matrix becomes a lookup, A(m,k) = cₖ(vₘ), and G1's A is the identity. |
+| Rows of B are e_{vₖ}ᵀ | `setConstraints` in `src/landmarksolver.cpp` | B only picks out values: (B u₀)ₖ = u₀(vₖ). The baselines' k×k matrix becomes a lookup, A(m,k) = cₖ(vₘ), and G1's A is the identity. |
 | `pickCorner`: the largest weight among corners not on the outline (D7) | `src/landmarks.cpp:47` | Snaps to the corner nearest the click on screen. An outline vertex has u₀ = 0, so r = 0 and forward(eᵥ) = 0: its column of A would be zero, and A singular. |
-| `fixedMask()`, built in `prepare()` | `src/landmarksolver.cpp:65` | The fixed set as one flag per vertex. It is also the first piece of B1: the interior map for K_II. |
+| `fixedMask()`, built in `prepare()` | `prepare` in `src/landmarksolver.cpp` | The fixed set as one flag per vertex. It is also the first piece of B1: the interior map for K_II. |
 | `surfacePoint = V.row(v)` | `src/landmarks.cpp` | The marker is drawn exactly where the constraint applies. |
 | Rebind re-snaps; keeps `sketchPos`; sets `baseHeight = \|h₀(v)\|` | `rebindLandmarks`, `src/landmarks.cpp:137` | Vertex ids change with every reconstruction. Keeping the click position avoids drift, and measuring the height at the vertex keeps rₖ consistent with the drawn target. |
 | No two landmarks on one vertex | click: `src/mainwindow.cpp:1437`; rebind: `src/landmarks.cpp` | Two identical rows of B make P3's hard-mode KKT system and the baselines' A singular. |
@@ -460,10 +509,10 @@ point inside a face would smear them over three vertices.
 - The rebind-side duplicate guard is compiled only.
 - The snapped-vertex highlight from §1 is not done.
 
-### 7.2 Next: per-mesh operators (B1–B3)
-**B1. `[prepare]`.** The code goes in `src/landmarksolver.cpp:68`, after the
-`isFixed` lines and before `ready = true`. The members go in
-`src/landmarksolver.h:118`.
+### 7.2 Done: per-mesh operators (B1–B3) **[v2.2]**
+**B1. `prepare()`.** After the `isFixed` lines and before `ready = true`. The
+members are `interiorIdx`, `toInterior`, `massI` and `ldlt`, plus
+`sheetLabels` (D2) and `meanEdge` (D3).
 
 **Math:** K_II = −L restricted to interior rows and columns. It is symmetric
 positive definite: it is the finite-element stiffness matrix with zero values
@@ -485,8 +534,7 @@ ldlt.compute(K_II);  if ldlt.info() != Eigen::Success: return   # ready stays fa
   already included. Don't add `<Eigen/SparseCholesky>`, which brings back the
   include-order errors.
 
-**B2. `[forward]`** (`src/landmarksolver.cpp:239`): from pressure to
-displacement.
+**B2. `forward()`**: from pressure to displacement.
 
   L_II du_I = M_II dp_I, so **du_I = L_II⁻¹ M_II dp_I = −K_II⁻¹ (m ∘ dp)_I**,
   with du = 0 on the fixed set.
@@ -499,8 +547,7 @@ du = zeros(n);  du(interior[a]) = -x[a]          # minus sign: we factored -L
 
 One back-substitution: about 1 ms at 11.5k vertices.
 
-**B3. `[implied]`** (`src/landmarksolver.cpp:246`): from displacement to
-pressure.
+**B3. `implied()`**: from displacement to pressure.
 
   **dp_I = M_II⁻¹ (L du)_I**, and dp = 0 on the fixed set. Since du = 0 on the
   fixed set, (L du)_I = L_II du_I, so `implied` is exactly the inverse of
@@ -516,9 +563,12 @@ dp = zeros(n);  for interior i: dp(i) = Ldu(i) / M(i,i)
 - **Sign:** L is negative semi-definite, so a bump in u has a Laplacian of the
   opposite sign. A dp that pushes a vertex away from the drawing plane has sign
   −sgn(u₀). For display or export, −sgn(u₀)·dp makes "pushes outward" positive
-  on both sheets. Decide this once, as part of D4.
+  on both sheets. **[v2.2]** Decided in D4: `lastDpOutward()` returns it.
+- **Verified:** `implied(forward(e_v)) = e_v` to 1.3e-15, `forward` is 0 on
+  the fixed set, and the LDLT of K_II succeeds on the heart (11,549
+  vertices).
 
-### 7.3 Next: the four baselines as one basis solve
+### 7.3 Done: the four baselines as one basis solve **[v2.2]**
 G1, G2, P1 and P2 differ only in a **column** cₖ ∈ ℝⁿ per handle: the du that
 coefficient 1 on handle k produces.
 
@@ -534,30 +584,32 @@ This is §2.1's `basisSolve`: `(B g) α = r` there is `A α = r` here.
 | **P1** | forward(e_{vₖ}) | e_{vₖ} | −m_{vₖ}(K_II⁻¹)_{vₘvₖ} |
 | **P2** | forward(wₖ) | wₖ | read off the columns |
 
-- **Setup, once per landmark set:** in `setConstraintsBaseline`
-  (`src/landmarksolver.cpp:119`):
-  1. Build C (n×k).
-  2. Read off A(m,k) = C(vₘ, k).
-  3. Factor A with `Eigen::FullPivLU<Eigen::MatrixXd>`. Return false if
-     `!isInvertible()`.
-- **Per drag frame:** in `solveBaseline` (`src/landmarksolver.cpp:213`):
-  `alpha = Alu.solve(r); duOut = C * alpha`. That takes microseconds.
-- **Members:** at `src/landmarksolver.h:123`, for example
-  `std::vector<int> handles; Eigen::MatrixXd C; Eigen::FullPivLU<Eigen::MatrixXd> Alu;`
-- **Placeholder:** delete the "not implemented yet" message
-  (`src/landmarksolver.cpp:162`) once all four cases work.
+- **Setup, once per landmark set:** in `setConstraintsBaseline`:
+  1. Build C (n×k), the member `basis`.
+  2. Read off A(m,k) = C(vₘ, k), i.e. A = B·C.
+  3. Factor A with `Eigen::FullPivLU<Eigen::MatrixXd>` (`basisLU`). Return
+     false if `!isInvertible()`. Steps 2 and 3 are `factorBasis()`.
+- **Per drag frame:** one case in `solveBaseline`, shared by G2, P1 and P2:
+  `alpha = basisLU.solve(r); duOut = basis * alpha`. That takes
+  microseconds.
+- **Why LU:** A is not symmetric. For P1, A = −S·D, with S a block of K_II⁻¹
+  and D the handle masses.
+- **Placeholder:** **[v2.2]** removed; every case returns its own result.
 
-**G1** (setup TODO at `:142`, solve TODO at `:222`)
+**G1** **[v2.2 done]**
 - **Math:** du = Σ rₖ e_{vₖ}. A = I, so α = r.
 - **Setup:** store `handles`.
 - **Solve:** `duOut(handles[k]) = r(k)`.
 - **Expect:** only k vertices move. dp is a 1-ring stencil, and Σ mᵢ dpᵢ ≈ 0
   when the handle isn't next to the outline (L's rows sum to zero).
+- **Measured:** du is nonzero only at the handles, dp(v) = r·L_vv/m_v, and
+  the net force is about 1e-12.
 
-**G2** (setup TODO at `:146`, solve TODO at `:225`)
+**G2** **[v2.2 done]**
 - **Falloff:** wₖ(j) = (1 − (dₖⱼ/R)²)³ when dₖⱼ < R, vertex j is on handle
   k's sheet (D2) and j is not fixed. Otherwise wₖ(j) = 0. dₖⱼ is the xy
-  distance on `VDefault`, in canvas pixels (D3).
+  distance on `VDefault`, in canvas pixels; R is set in mean edge lengths and
+  converted with `meanEdge` (D3). This is `falloff(v)`, which P2 shares.
 - **Column:** cₖ = u₀ ∘ wₖ.
 
 ```text
@@ -573,8 +625,11 @@ A(m, k) = C(v_m, k);  factor
   down to 1 at the rim (Δ3).
 - **Why this falloff:** (1 − t²)³ has w, w′ and w″ all zero at t = 1, so the
   implied dp has no ridge at the rim.
+- **Measured:** α = f² − 1 and h = h₀√(1 + αw) to 1e-14. At R = 3.7, 7.4 and
+  14.9 edges, 28, 97 and 344 of the sheet's 1,152 vertices move (P2 moves all
+  of them). dp has both signs: a push inside and a pull ring.
 
-**P1** (setup TODO at `:152`, solve TODO at `:230`)
+**P1** **[v2.2 done]**
 - **Math:** dp = Σ αₖ e_{vₖ}, pressure at the handle vertices only. The column
   cₖ = forward(e_{vₖ}) is the discrete **Green's function**: the shape's
   response to pressure at one vertex.
@@ -585,20 +640,31 @@ A(m, k) = C(v_m, k);  factor
 - **Solve:** the same as G1's.
 - **Expect:** du moves the whole sheet, and `implied(du)` is nonzero **only**
   at the handle vertices. That makes a strong correctness check.
+- **Measured:** `implied(du)` = α at the handles and about 1e-14 elsewhere.
+  du is exactly 0 on the other sheet, and A's entries between the two sheets
+  are exactly 0. A ×1.0 anchor next to a handle gets a negative α (suction).
 
-**P2** (setup TODO at `:156`, solve TODO at `:230`)
+**P2** **[v2.2 done]**
 - **Math:** the pressure basis φₖ = wₖ: G2's falloff without the u₀ factor,
   on the interior and the handle's sheet. The column is cₖ = forward(φₖ).
 - **Setup:** build φₖ, run `forward`, then A, then the factorization.
 - **Solve:** the same as G1's.
 - **Expect:** `implied(du)` ≈ Σ αₖ φₖ, a smooth bump. When R is below one edge
   length, P2 becomes P1.
+- **Measured:** `implied(du)` = Σ αₖ φₖ to 1e-14, and R below one edge gives P1
+  bit for bit. At R = 3.7, 7.4 and 14.9 edges the peak dp is 24, 12 and 6.3
+  (P1: 100), while the net force grows from 3.9k (P1) to 28k: a wider bump
+  lowers the peak but adds more air.
 
 **Later, P3-R** (Δ4): the same machinery with cₖ = forward(φₖ), where
 φₖ = mask_R(K_II⁻¹ e_{vₖ}).
 
-### 7.4 Remaining decisions
-- **D2: which sheet a falloff may touch** (`src/landmarksolver.cpp:125`)
+### 7.4 Decisions **[v2.2]**
+- **D2: which sheet a falloff may touch.** **[v2.2 done]** The robust option,
+  computed with `igl::vertex_components` on K_II instead of a flood fill:
+  K_II's off-diagonal entries are exactly the edges between interior
+  vertices. Stored as `sheetLabels` (−1 on the outline) and exported as
+  `component`. The options as first written:
   - **One-part shapes:** `sameSheet(j, k) = sgn(u0(j)) == lms[k].side`.
   - **Several parts (robust):** connected components with the fixed vertices
     removed, computed once in `prepare`:
@@ -613,17 +679,23 @@ A(m, k) = C(v_m, k);  factor
     fixed, so each part's front and back become separate components. This
     also keeps a disk on a leg from spilling onto an overlapping body at the
     same xy. The components are also the `component` export field (§3.1).
-- **D3: the units of R** (`src/landmarksolver.cpp:130`,
-  `src/ui/myshell.html:618`)
+- **D3: the units of R.** **[v2.2 done]** R is in mean edge lengths, as the
+  M1 contract specifies: `setFalloffRadius(edges)`, converted with the mean
+  x,y edge length `meanEdge` from `prepare()`. Default 4 edges. The slider
+  range belongs to Part B (`[D3 radius]` in `src/ui/myshell.html`).
   - **Units:** `VDefault` x and y are canvas pixels.
   - **Edge length:** `triangleOpts = "pqa25QYY"` allows at most 25 px² on the
     half-resolution image, so 100 px² on the canvas, and edges are about
-    10–15 px. R ≈ 10 makes G2 ≈ G1 and P2 ≈ P1.
-  - **Option:** scale R by the size of the sheet, for example
+    10–15 px. R ≈ 10 px makes G2 ≈ G1 and P2 ≈ P1.
+  - ~~**Option:** scale R by the size of the sheet, for example
     ρ·√(sheet area), so one slider value means the same locality on any
-    drawing.
-  - **Keep the HTML default equal to `LandmarkSolver::radius` (50).**
-- **D4: signs on the back sheet** (`src/landmarksolver.cpp:217`)
+    drawing.~~ Edge lengths give that, and also stay comparable under mesh
+    refinement.
+  - **Keep the HTML default equal to `LandmarkSolver::radiusEdges` (4).**
+- **D4: signs on the back sheet.** **[v2.2 done]** The solver keeps signed
+  u. The reported fields are outward positive (`lastDuOutward()`,
+  `lastDpOutward()`, `lastDhOutward()`; M1 contract decision 1). The test
+  below passes for all five methods.
   - **What already works:** u₀ < 0 on the back sheet, so r < 0 for f > 1. That
     makes u more negative, and h = sgn(u)·√|u| moves *away* from the plane.
     G2's signed u₀ and the α of P1/P2 carry the sign automatically.
@@ -633,36 +705,40 @@ A(m, k) = C(v_m, k);  factor
     (P methods with f < 1).
   - **Test:** put a back-sheet handle at f = 1.5. In every method it must move
     away from the plane.
-- **D5: anchors** (`src/landmarksolver.cpp:133`): nothing extra. An anchor is
-  a handle whose r comes from its held factor; its own column lets the k×k
-  solve keep it still while the other handles move.
-- **D6: the weight slider** (`src/landmarksolver.cpp:98`,
-  `src/ui/main.js:113`): the baselines ignore `weight`. In the UI, for example
+- **D5: anchors** **[v2.2 done]**: nothing extra. An anchor is a handle whose
+  r comes from its held factor; its own column lets the k×k solve keep it
+  still while the other handles move.
+- **D6: the weight slider** **[Part B]** (`src/ui/main.js`, `[D6 weight]`):
+  the baselines ignore `weight`. In the UI, for example
   `$('#landmarkWeight').prop('disabled', method != 4)`, or hide it.
 - **D7: outline** **[done]**: `pickLandmark` and `rebindLandmarks` never put a
-  handle on a fixed vertex. A check of `isFixed[v_k]` in the setup would only
-  guard landmarks that come from somewhere else.
+  handle on a fixed vertex. **[v2.2]** `setConstraints` also rejects such
+  landmarks, and a `vertexId` of −1, when they come from somewhere else.
 
 ### 7.5 Test checklist
-These extend §2.3.
-1. All factors 1 → r = 0 → du = 0 for every method.
+These extend §2.3. **[v2.2]** The status of each item is at the end of it;
+the numbers are in §2.3.
+1. All factors 1 → r = 0 → du = 0 for every method. **Passes.**
 2. At each handle, the new height is exactly fₖ·h₀(vₖ): the target marker sits
-   on the surface.
-3. `implied(forward(e_v)) = e_v`.
+   on the surface. **Passes** (to about 1e-14).
+3. `implied(forward(e_v)) = e_v`. **Passes** (1.3e-15).
 4. P1: `implied(du)` is nonzero only at the handles. P2: `implied(du)` ≈ α·φ.
-5. G1: Σ mᵢ dpᵢ ≈ 0 when the handle is away from the outline.
-6. R below one edge: G2 = G1 and P2 = P1.
+   **Passes.**
+5. G1: Σ mᵢ dpᵢ ≈ 0 when the handle is away from the outline. **Passes.**
+6. R below one edge: G2 = G1 and P2 = P1. **Passes** (bit for bit).
 7. A back-sheet handle moves away from the plane (D4). A front handle leaves
-   the back sheet untouched (D2, Δ9).
+   the back sheet untouched (D2, Δ9). **Passes** for the baselines; P3's
+   back sheet waits for Δ1.
 8. **Export for SDS…**, then compare `du` / `dp` with the Python reference on
-   the same scene (§3.1).
+   the same scene (§3.1). **Open:** needs `scripts/handle_methods.py`.
 
 ### 7.6 Order of work
-1. **B1**, then **B2/B3** with test 3.
-2. **G1**, which needs no `forward`.
-3. **P1**, the first real test of `forward`.
-4. **P2** with **D2**.
-5. **G2**.
-6. **D3** and **D6** in the UI.
+1. **B1**, then **B2/B3** with test 3. **[v2.2 done]**
+2. **G1**, which needs no `forward`. **[v2.2 done]**
+3. **P1**, the first real test of `forward`. **[v2.2 done]**
+4. **P2** with **D2**. **[v2.2 done]**
+5. **G2**. **[v2.2 done]**
+6. **D3** and **D6** in the UI. **[v2.2]** D3's units are done; the slider
+   range and D6 are Part B's.
 7. Then the open items in the status table: interior-row P3 (Δ1), P3-R, the
-   export fields and the figures.
+   export fields **[v2.2 done]** and the figures.
