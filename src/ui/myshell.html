@@ -608,6 +608,15 @@ The exported file may be directly imported into a recent version of <a href="htt
             </button>
             <span id="landmarkControls" class="mr-1 mb-1">
               <span id="landmarkReadout" class="badge badge-light"></span>
+              <select id="landmarkMethod" class="custom-select custom-select-sm" data-tooltip="tooltip" title="How a handle changes the shape: G edits the shape, P edits the pressure">
+                <option value="0">G1 vertex</option>
+                <option value="1">G2 falloff</option>
+                <option value="2">P1 spike</option>
+                <option value="3">P2 bump</option>
+                <option value="4" selected>P3 optimal</option>
+              </select>
+              <!-- TODO(human) [D3 radius]: range and default of R in canvas pixels (keep the default equal to LandmarkSolver::radius) -->
+              <input type="range" id="landmarkRadius" min="10" max="200" step="5" value="50" data-tooltip="tooltip" title="Falloff radius R (G2, P2)">
               <input type="range" id="landmarkWeight" min="-4" max="5" step="0.5" value="5" data-tooltip="tooltip" title="Landmark fit: left = soft (smoother, approximate), right = hard (exact)">
             </span>
             <button type="button" class="btn buttonMode mr-3 mb-1" data-toggle="button" id="buttonAnimate" data-tooltip="tooltip" title="Animate 3D model">

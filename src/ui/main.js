@@ -103,6 +103,19 @@ $('#landmarkWeight').on('input', function() {
   var weight = v >= parseFloat($(this).attr('max')) ? 0 : Math.pow(10, v);
   Module._setLandmarkWeight(weight);
 });
+// method dropdown and falloff radius go to the solver together; values match
+// HandleMethod in src/landmarksolver.h
+function sendHandleMethod() {
+  var method = parseInt($('#landmarkMethod').val());
+  var radius = parseFloat($('#landmarkRadius').val());
+  var usesRadius = method == 1 || method == 3;  // G2, P2
+  $('#landmarkRadius').css('display', usesRadius ? 'inline-block' : 'none');
+  // TODO(human) [D6 weight]: the soft/hard slider only affects P3 (method 4).
+  // Decide here whether to hide or disable #landmarkWeight for the baselines.
+  Module._setHandleMethod(method, radius);
+}
+$('#landmarkMethod').on('change', sendHandleMethod);
+$('#landmarkRadius').on('input', sendHandleMethod);
 function js_landmarkSelected(selected, factor, anchor) {
   var text = '';
   if (selected) text = anchor ? 'anchor' : '×' + factor.toFixed(2);

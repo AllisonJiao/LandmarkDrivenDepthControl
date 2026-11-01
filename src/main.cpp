@@ -140,6 +140,10 @@ EMSCRIPTEN_KEEPALIVE void setLandmarkWeight(double weight) {
   mainWindow.setLandmarkWeight(weight);
 }
 
+EMSCRIPTEN_KEEPALIVE void setHandleMethod(int method, double radius) {
+  mainWindow.setHandleMethod(method, radius);
+}
+
 EMSCRIPTEN_KEEPALIVE void setManipulationMode(int modeInt) {
   ManipulationMode mode = DRAW_OUTLINE;
   if (modeInt == 1)

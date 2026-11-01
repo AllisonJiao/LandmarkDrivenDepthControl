@@ -33,29 +33,71 @@ Eigen::SparseMatrix<double> buildEnergy(const Eigen::SparseMatrix<double> &L,
                                         const Eigen::SparseMatrix<double> &M,
                                         const Eigen::SparseMatrix<double> &Minv);
 
+// How landmark targets become a new rest shape. Every method hits the target
+// u at each handle exactly (P3 in hard mode); they differ in which field
+// they edit and where:
+//   G1  du at the handle vertex only
+//   G2  du with a radial falloff of radius R
+//   P1  dp at the handle vertex only, du = forward(dp)
+//   P2  dp with a radial falloff of radius R, du = forward(dp)
+//   P3  dp everywhere, minimizing the energy of buildEnergy (KKT solve)
+// The values match the method dropdown in the web UI.
+enum class HandleMethod { G1 = 0, G2 = 1, P1 = 2, P2 = 3, P3 = 4 };
+
+const char *handleMethodName(HandleMethod method);
+
 class LandmarkSolver {
  public:
   // Called after every reconstruction with the default (unedited) rest mesh.
   void prepare(const Eigen::MatrixXd &VDefault, const Eigen::MatrixXi &F,
                const std::vector<std::vector<int>> &bnds);
   // Rebuilds the constraint matrix and factors the system. Call when
-  // landmarks are added, removed or toggled, or when the weight changes.
-  // weight = infinity means hard constraints.
+  // landmarks are added, removed or toggled, or when the weight, the method
+  // or the radius changes. weight = infinity means hard constraints.
   bool setConstraints(const std::vector<Landmark> &lms, double weight);
   // Solves for the current landmark factors and writes the new rest heights
   // into VRestOut (x,y are copied from the default mesh).
   bool solve(const std::vector<Landmark> &lms, Eigen::MatrixXd &VRestOut);
 
+  // Takes effect at the next setConstraints. radius is in the units of the
+  // rest mesh's x,y (canvas pixels) and is used by G2 and P2.
+  void setMethod(HandleMethod method, double radius);
+  HandleMethod getMethod() const { return method; }
+  double getRadius() const { return radius; }
+
   // Writes the default mesh, the flat operators L and M, the outline
-  // indices and the landmarks as JSON for the external score distillation
-  // tool (sds/).
+  // indices, the landmarks and the fields of the last solve as JSON for the
+  // external tools in sds/.
   bool exportScene(const std::string &path,
                    const std::vector<Landmark> &lms) const;
 
   bool isReady() const { return ready; }
   const Eigen::MatrixXd &defaultMesh() const { return VDefault; }
+  // vertices held at u = 0: the outlines of all parts
+  const Eigen::VectorXi &fixedVertices() const { return fixedIdx; }
+  // the same set as one flag per vertex
+  const std::vector<bool> &fixedMask() const { return isFixed; }
+  // Fields of the last solve, per vertex: du = change of u = sgn(h) h^2,
+  // dp = implied change of pressure (0 on the outline). Empty before a solve.
+  const Eigen::VectorXd &lastDu() const { return du; }
+  const Eigen::VectorXd &lastDp() const { return dp; }
 
  private:
+  // P3: factors the KKT system of buildEnergy with the landmark rows B
+  bool setConstraintsP3();
+  bool solveP3(const Eigen::VectorXd &r, Eigen::VectorXd &duOut);
+  // G1, G2, P1, P2: per-landmark-set precomputation and per-frame solve
+  bool setConstraintsBaseline(const std::vector<Landmark> &lms);
+  bool solveBaseline(const std::vector<Landmark> &lms, const Eigen::VectorXd &r,
+                     Eigen::VectorXd &duOut);
+
+  // Pressure -> displacement: du = L_II^-1 M_II dp on the interior vertices,
+  // 0 on the fixed ones. dp and the result have one entry per vertex.
+  Eigen::VectorXd forward(const Eigen::VectorXd &dp) const;
+  // Displacement -> pressure: dp = M_II^-1 L_I du on the interior vertices,
+  // 0 on the fixed ones.
+  Eigen::VectorXd implied(const Eigen::VectorXd &du) const;
+
   Eigen::MatrixXd VDefault;
   Eigen::MatrixXi F;
   Eigen::SparseMatrix<double> L, M;  // flat cotangent Laplacian, Voronoi mass
@@ -67,6 +109,21 @@ class LandmarkSolver {
   int numConstraints = 0;
   bool ready = false;
   bool factored = false;
+
+  HandleMethod method = HandleMethod::P3;
+  double radius = 50;
+  Eigen::VectorXd du, dp;  // fields of the last solve
+  std::vector<bool> isFixed;  // per vertex: in fixedIdx
+
+  // TODO(human) [prepare]: members filled once per mesh in prepare(), e.g.
+  // the interior vertex list and its inverse map, and a factorization of
+  // -L_II (positive definite; L is negative semi-definite) for forward(),
+  // such as Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>>.
+
+  // TODO(human) [per landmark set]: members filled in
+  // setConstraintsBaseline() and read in every solveBaseline() call, e.g.
+  // the handle vertex ids, the falloff weights (G2, P2), and the responses
+  // g = forward(basis column) per handle (P1, P2).
 };
 
 #endif  // LANDMARKSOLVER_H

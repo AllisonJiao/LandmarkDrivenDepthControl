@@ -16,8 +16,7 @@ import scipy.sparse as sp
 
 @dataclass
 class Landmark:
-    face: int
-    bary: np.ndarray  # weights of F[face]
+    vertex: int  # mesh vertex the handle sits on (never on the outline)
     factor: float  # target height = factor * default height
     side: int  # sign of the rest z of the sheet it lies on
     anchor: bool
@@ -55,26 +54,38 @@ class Scene:
         self.h0 = h0
         self.u0 = np.sign(h0) * h0**2
 
-        self.landmarks = [
-            Landmark(
-                face=int(l["face"]),
-                bary=np.asarray(l["bary"], dtype=np.float64),
+        self.landmarks = []
+        for l in d.get("landmarks", []):
+            v = self._landmark_vertex(l, is_fixed)
+            if v is None:
+                continue
+            self.landmarks.append(Landmark(
+                vertex=v,
                 factor=float(l["factor"]),
                 side=int(l["side"]),
                 anchor=bool(l.get("anchor", False)),
-            )
-            for l in d.get("landmarks", [])
-        ]
+            ))
+
+    def _landmark_vertex(self, l, is_fixed):
+        """Vertex of an exported landmark. Scenes written before landmarks
+        became vertices store a face and barycentric weights instead; those
+        snap the same way as pickLandmark: the corner with the largest weight
+        that is not on the outline (None if all three are)."""
+        if "vertex" in l:
+            return int(l["vertex"])
+        corners = self.F[int(l["face"])]
+        bary = np.asarray(l["bary"], dtype=np.float64)
+        ok = ~is_fixed[corners]
+        if not ok.any():
+            return None
+        return int(corners[ok][np.argmax(bary[ok])])
 
     def landmark_matrix(self):
-        """Sparse k x n matrix whose row k interpolates a field at landmark k."""
-        rows, cols, vals = [], [], []
-        for k, lm in enumerate(self.landmarks):
-            for j in range(3):
-                rows.append(k)
-                cols.append(self.F[lm.face, j])
-                vals.append(lm.bary[j])
-        return sp.csr_matrix((vals, (rows, cols)), shape=(len(self.landmarks), self.n))
+        """Sparse k x n matrix B whose row k reads a field at landmark k's
+        vertex, so (B u)[k] = u[vertex k]."""
+        k = len(self.landmarks)
+        cols = [lm.vertex for lm in self.landmarks]
+        return sp.csr_matrix((np.ones(k), (np.arange(k), cols)), shape=(k, self.n))
 
     def to_original_heights(self, h):
         return np.asarray(h) * self.R
