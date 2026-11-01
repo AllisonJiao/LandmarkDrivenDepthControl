@@ -131,8 +131,9 @@ class LandmarkSolver {
   Eigen::VectorXi sheetLabels;
 
   // once per landmark set (setConstraintsBaseline), read on every drag frame:
-  // one column of du per handle (n x k; P1: forward(e_v)), and the LU of
-  // A = B * basis (k x k), so that du = basis * A^-1 r hits every target
+  // one column of du per handle (n x k; G2: u0 .* falloff(v), P1: forward(e_v),
+  // P2: forward(falloff(v))), and the LU of A = B * basis (k x k), so that
+  // du = basis * A^-1 r hits every target
   Eigen::MatrixXd basis;
   Eigen::FullPivLU<Eigen::MatrixXd> basisLU;
 };

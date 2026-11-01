@@ -161,23 +161,25 @@ bool LandmarkSolver::setConstraintsBaseline(const vector<Landmark> &lms) {
   // TODO(human) [D3 radius]: `radius` is in canvas pixels, like
   //   VDefault.col(0) and col(1). Its range and default are set by the
   //   #landmarkRadius slider in src/ui/myshell.html.
-  // TODO(human) [D5 anchors]: an anchor is a landmark with a fixed factor
-  //   (lms[k].anchor). With several landmarks, G2/P1/P2 need one basis column
-  //   per landmark and a k x k solve so that each one hits its own target.
+  // [D5 anchors] an anchor is a landmark whose factor is held
+  //   (lms[k].anchor). It keeps its own basis column and target, so the k x k
+  //   solve holds it in place while the other handles move.
   // [D7 outline] pickLandmark and rebindLandmarks never put a handle on a
   //   fixed vertex: its target r would be 0 and forward() is 0 there, which
   //   makes the k x k system singular. A check of isFixed here would only
   //   guard landmarks that come from somewhere else.
-  basis.resize(0, 0);  // a method that builds no basis must not reuse one
+  basis.resize(0, 0);  // G1 and P3 use none; free the last method's
   switch (method) {
     case HandleMethod::G1:
       return true;  // du = B' r needs nothing beyond B
     case HandleMethod::G2:
-      // TODO(human) [G2]: falloff w_j = (1 - (d_j / radius)^2)^3 for
-      // d_j < radius around each handle (2D distance on VDefault), with
-      // du_j = u0_j * sum_k c_k w_kj. Precompute w and the k x k matrix that
-      // maps the coefficients c to du at the handles.
-      break;
+      // a smooth edit of the shape itself: du = u0 .* sum_k alpha_k w_k
+      // scales the height by sqrt(1 + alpha w) near the handle and keeps
+      // u = 0 on the outline; G2 equals G1 when the radius is below one edge
+      basis.resize(VDefault.rows(), lms.size());
+      for (int k = 0; k < lms.size(); k++)
+        basis.col(k) = u0.cwiseProduct(falloff(lms[k].vertexId));
+      return factorBasis();
     case HandleMethod::P1:
       // unit pressure at each handle vertex; its response forward(e_v) is
       // the discrete Green's function of the handle's sheet
@@ -195,10 +197,7 @@ bool LandmarkSolver::setConstraintsBaseline(const vector<Landmark> &lms) {
     case HandleMethod::P3:
       return false;  // handled by setConstraintsP3()
   }
-  // placeholder until the cases above are implemented
-  cerr << handleMethodName(method)
-       << ": not implemented yet, showing the default inflation" << endl;
-  return true;
+  return false;
 }
 
 bool LandmarkSolver::solve(const vector<Landmark> &lms, MatrixXd &VRestOut) {
@@ -259,13 +258,10 @@ bool LandmarkSolver::solveBaseline(const vector<Landmark> &lms,
       duOut = B.transpose() * r;
       break;
     case HandleMethod::G2:
-      // TODO(human) [G2]: solve the k x k system for c, then
-      // duOut = u0 .* sum_k c_k w_k.
-      break;
     case HandleMethod::P1:
     case HandleMethod::P2: {
-      if (basis.cols() != r.size()) break;  // setup built no basis
-      // one coefficient per handle (the pressure added there), then
+      // one coefficient per handle (G2: the relative change of u there,
+      // f^2 - 1 for a lone handle; P1, P2: the pressure added there), then
       // du = sum_k alpha_k * basis column k
       const VectorXd alpha = basisLU.solve(r);
       duOut = basis * alpha;
