@@ -90,6 +90,8 @@ class LandmarkSolver {
   bool setConstraintsBaseline(const std::vector<Landmark> &lms);
   bool solveBaseline(const std::vector<Landmark> &lms, const Eigen::VectorXd &r,
                      Eigen::VectorXd &duOut);
+  // factors A = B * basis; false if it is singular
+  bool factorBasis();
 
   // Pressure -> displacement: du = L_II^-1 M_II dp on the interior vertices,
   // 0 on the fixed ones. dp and the result have one entry per vertex.
@@ -115,15 +117,18 @@ class LandmarkSolver {
   Eigen::VectorXd du, dp;  // fields of the last solve
   std::vector<bool> isFixed;  // per vertex: in fixedIdx
 
-  // TODO(human) [prepare]: members filled once per mesh in prepare(), e.g.
-  // the interior vertex list and its inverse map, and a factorization of
-  // -L_II (positive definite; L is negative semi-definite) for forward(),
-  // such as Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>>.
+  // once per mesh (prepare): the interior vertices, their inverse map (-1 on
+  // the fixed vertices), the interior mass, and -L_II factored (it is SPD)
+  std::vector<int> interiorIdx;
+  Eigen::VectorXi toInterior;
+  Eigen::VectorXd massI;
+  Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> ldlt;
 
-  // TODO(human) [per landmark set]: members filled in
-  // setConstraintsBaseline() and read in every solveBaseline() call, e.g.
-  // the handle vertex ids, the falloff weights (G2, P2), and the responses
-  // g = forward(basis column) per handle (P1, P2).
+  // once per landmark set (setConstraintsBaseline), read on every drag frame:
+  // one column of du per handle (n x k; P1: forward(e_v)), and the LU of
+  // A = B * basis (k x k), so that du = basis * A^-1 r hits every target
+  Eigen::MatrixXd basis;
+  Eigen::FullPivLU<Eigen::MatrixXd> basisLU;
 };
 
 #endif  // LANDMARKSOLVER_H

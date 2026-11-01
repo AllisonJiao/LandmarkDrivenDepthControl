@@ -65,11 +65,34 @@ void LandmarkSolver::prepare(const MatrixXd &VDefault, const MatrixXi &F,
   isFixed.assign(VDefault.rows(), false);
   for (int i: fixedSet) isFixed[i] = true;
 
-  // TODO(human) [prepare]: build what forward() and implied() need, once per
-  // mesh: the interior vertices (all vertices not in fixedIdx) with a map
-  // from vertex id to interior index, L_II = L restricted to the interior,
-  // and a factorization of -L_II. Return without setting ready if the
-  // factorization fails.
+  // interior vertices I and their inverse map (-1 on the fixed vertices)
+  interiorIdx.clear();
+  toInterior = VectorXi::Constant(VDefault.rows(), -1);
+  for (int i = 0; i < VDefault.rows(); i++) {
+    if (isFixed[i]) continue;
+    toInterior(i) = interiorIdx.size();
+    interiorIdx.push_back(i);
+  }
+  const int nI = interiorIdx.size();
+
+  // K_II = -L_II is symmetric positive definite (every sheet touches the
+  // outline, where u = 0), so forward() is one LDLT back-substitution
+  vector<Triplet<double>> triplets;
+  for (int k = 0; k < L.outerSize(); k++)
+    for (SparseMatrix<double>::InnerIterator it(L, k); it; ++it) {
+      const int a = toInterior(it.row()), b = toInterior(it.col());
+      if (a >= 0 && b >= 0) triplets.emplace_back(a, b, -it.value());
+    }
+  SparseMatrix<double> KII(nI, nI);
+  KII.setFromTriplets(triplets.begin(), triplets.end());
+  const VectorXd Mdiag = M.diagonal();
+  massI.resize(nI);
+  for (int a = 0; a < nI; a++) massI(a) = Mdiag(interiorIdx[a]);
+  ldlt.compute(KII);
+  if (ldlt.info() != Success) {
+    cerr << "landmark solver: factorization of -L_II failed" << endl;
+    return;
+  }
 
   ready = true;
 }
@@ -137,11 +160,10 @@ bool LandmarkSolver::setConstraintsBaseline(const vector<Landmark> &lms) {
   //   fixed vertex: its target r would be 0 and forward() is 0 there, which
   //   makes the k x k system singular. A check of isFixed here would only
   //   guard landmarks that come from somewhere else.
+  basis.resize(0, 0);  // a method that builds no basis must not reuse one
   switch (method) {
     case HandleMethod::G1:
-      // TODO(human) [G1]: du = r at each handle vertex, 0 elsewhere. Store
-      // the handle vertex ids.
-      break;
+      return true;  // du = B' r needs nothing beyond B
     case HandleMethod::G2:
       // TODO(human) [G2]: falloff w_j = (1 - (d_j / radius)^2)^3 for
       // d_j < radius around each handle (2D distance on VDefault), with
@@ -149,12 +171,15 @@ bool LandmarkSolver::setConstraintsBaseline(const vector<Landmark> &lms) {
       // maps the coefficients c to du at the handles.
       break;
     case HandleMethod::P1:
-      // TODO(human) [P1]: basis dp = e_i per handle; precompute
-      // g_k = forward(e_i) and the k x k matrix (B g).
-      break;
+      // unit pressure at each handle vertex; its response forward(e_v) is
+      // the discrete Green's function of the handle's sheet
+      basis.resize(VDefault.rows(), lms.size());
+      for (int k = 0; k < lms.size(); k++)
+        basis.col(k) = forward(VectorXd::Unit(VDefault.rows(), lms[k].vertexId));
+      return factorBasis();
     case HandleMethod::P2:
-      // TODO(human) [P2]: basis dp = falloff w around each handle; precompute
-      // g_k = forward(w_k) and the k x k matrix (B g).
+      // TODO(human) [P2]: basis dp = falloff w around each handle; fill
+      // basis.col(k) = forward(w_k), then return factorBasis() as P1 does.
       break;
     case HandleMethod::P3:
       return false;  // handled by setConstraintsP3()
@@ -219,33 +244,55 @@ bool LandmarkSolver::solveBaseline(const vector<Landmark> &lms,
   //   from the drawing plane for factors > 1.
   switch (method) {
     case HandleMethod::G1:
-      // TODO(human) [G1]: duOut(vertex of k) = r(k).
+      // r_k at each handle vertex, 0 elsewhere; B B' = I, so B du = r
+      duOut = B.transpose() * r;
       break;
     case HandleMethod::G2:
       // TODO(human) [G2]: solve the k x k system for c, then
       // duOut = u0 .* sum_k c_k w_k.
       break;
     case HandleMethod::P1:
-    case HandleMethod::P2:
-      // TODO(human) [P1, P2]: alpha = (B g)^-1 r, duOut = sum_k alpha_k g_k.
+    case HandleMethod::P2: {
+      if (basis.cols() != r.size()) break;  // no basis built (P2 for now)
+      // one coefficient per handle (the pressure added there), then
+      // du = sum_k alpha_k * basis column k
+      const VectorXd alpha = basisLU.solve(r);
+      duOut = basis * alpha;
       break;
+    }
     case HandleMethod::P3:
       return false;  // handled by solveP3()
   }
   return true;
 }
 
+bool LandmarkSolver::factorBasis() {
+  // A(m, k) = basis(v_m, k): how far handle m moves per unit coefficient of
+  // handle k. P1's A is -K_II^-1 (restricted) times the handle masses, which
+  // is not symmetric, so LU; FullPivLU can also tell when A is singular.
+  const MatrixXd A = B * basis;
+  basisLU.compute(A);
+  return basisLU.isInvertible();
+}
+
 VectorXd LandmarkSolver::forward(const VectorXd &dp) const {
-  // TODO(human) [forward]: du_I = L_II^-1 M_II dp_I with the factorization
-  // from prepare() (mind the sign: it factors -L_II), du = 0 on the fixed
-  // vertices.
-  return VectorXd::Zero(dp.size());
+  // L_II du_I = M_II dp_I and -L_II is factored, so du_I = -K_II^-1 (M dp)_I
+  VectorXd b(interiorIdx.size());
+  for (int a = 0; a < b.size(); a++) b(a) = massI(a) * dp(interiorIdx[a]);
+  const VectorXd x = ldlt.solve(b);
+  VectorXd duOut = VectorXd::Zero(dp.size());
+  for (int a = 0; a < x.size(); a++) duOut(interiorIdx[a]) = -x(a);
+  return duOut;
 }
 
 VectorXd LandmarkSolver::implied(const VectorXd &du) const {
-  // TODO(human) [implied]: dp_I = (L du)_I / M_II, dp = 0 on the fixed
-  // vertices. Used for every method to report the pressure change.
-  return VectorXd::Zero(du.size());
+  // dp_I = M_II^-1 (L du)_I; with du = 0 on the fixed vertices this is the
+  // exact inverse of forward()
+  const VectorXd Ldu = L * du;
+  VectorXd dpOut = VectorXd::Zero(du.size());
+  for (int a = 0; a < interiorIdx.size(); a++)
+    dpOut(interiorIdx[a]) = Ldu(interiorIdx[a]) / massI(a);
+  return dpOut;
 }
 
 bool LandmarkSolver::exportScene(const string &path,
