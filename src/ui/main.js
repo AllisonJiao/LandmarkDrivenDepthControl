@@ -112,7 +112,8 @@ function sendHandleMethod() {
   $('#landmarkRadius').css('display', usesRadius ? 'inline-block' : 'none');
   // TODO(human) [D6 weight]: the soft/hard slider only affects P3 (method 4).
   // Decide here whether to hide or disable #landmarkWeight for the baselines.
-  Module._setHandleMethod(method, radius);
+  Module._setHandleMethod(method);
+  Module._setFalloffRadius(radius);  // in mean edge lengths
 }
 $('#landmarkMethod').on('change', sendHandleMethod);
 $('#landmarkRadius').on('input', sendHandleMethod);

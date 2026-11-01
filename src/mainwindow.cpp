@@ -1530,9 +1530,15 @@ void MainWindow::setLandmarkWeight(double weight) {
   onLandmarksChanged();
 }
 
-void MainWindow::setHandleMethod(int method, double radius) {
+void MainWindow::setHandleMethod(int method) {
   if (method < 0 || method > static_cast<int>(HandleMethod::P3)) return;
-  landmarkSolver.setMethod(static_cast<HandleMethod>(method), radius);
+  landmarkSolver.setMethod(static_cast<HandleMethod>(method));
+  onLandmarksChanged();
+}
+
+void MainWindow::setFalloffRadius(double edges) {
+  if (!(edges > 0)) return;
+  landmarkSolver.setFalloffRadius(edges);
   onLandmarksChanged();
 }
 
@@ -1816,7 +1822,8 @@ void MainWindow::reset() {
   landmarkData = LandmarkData();
   // a new project keeps the method chosen in the UI
   LandmarkSolver freshSolver;
-  freshSolver.setMethod(landmarkSolver.getMethod(), landmarkSolver.getRadius());
+  freshSolver.setMethod(landmarkSolver.getMethod());
+  freshSolver.setFalloffRadius(landmarkSolver.getFalloffRadius());
   landmarkSolver = freshSolver;
 
   // reset reconstruction data

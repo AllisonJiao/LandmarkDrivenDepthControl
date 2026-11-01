@@ -59,11 +59,15 @@ class LandmarkSolver {
   // into VRestOut (x,y are copied from the default mesh).
   bool solve(const std::vector<Landmark> &lms, Eigen::MatrixXd &VRestOut);
 
-  // Takes effect at the next setConstraints. radius is in the units of the
-  // rest mesh's x,y (canvas pixels) and is used by G2 and P2.
-  void setMethod(HandleMethod method, double radius);
+  // Take effect at the next setConstraints. The falloff radius R of G2 and P2
+  // is in mean edge lengths of the rest mesh, so one value gives the same
+  // locality on a coarse or a fine mesh.
+  void setMethod(HandleMethod method);
+  void setFalloffRadius(double edges);
   HandleMethod getMethod() const { return method; }
-  double getRadius() const { return radius; }
+  double getFalloffRadius() const { return radiusEdges; }
+  // R in canvas pixels on the current mesh
+  double falloffRadiusPixels() const { return radiusEdges * meanEdge; }
 
   // Writes the default mesh, the flat operators L and M, the outline
   // indices, the landmarks and the fields of the last solve as JSON for the
@@ -92,8 +96,8 @@ class LandmarkSolver {
                      Eigen::VectorXd &duOut);
   // factors A = B * basis; false if it is singular
   bool factorBasis();
-  // (1 - (d / radius)^2)^3 on the vertices of v's sheet within radius of v
-  // (x,y distance d), 0 elsewhere; 1 at v. The bump of G2 and P2.
+  // (1 - (d / R)^2)^3 on the vertices of v's sheet within R of v (x,y
+  // distance d, R in pixels), 0 elsewhere; 1 at v. The bump of G2 and P2.
   Eigen::VectorXd falloff(int v) const;
 
   // Pressure -> displacement: du = L_II^-1 M_II dp on the interior vertices,
@@ -116,7 +120,8 @@ class LandmarkSolver {
   bool factored = false;
 
   HandleMethod method = HandleMethod::P3;
-  double radius = 50;
+  double radiusEdges = 4;  // falloff radius R in mean edge lengths
+  double meanEdge = 0;     // mean x,y edge length of the rest mesh (prepare)
   Eigen::VectorXd du, dp;  // fields of the last solve
   std::vector<bool> isFixed;  // per vertex: in fixedIdx
 

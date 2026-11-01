@@ -140,8 +140,13 @@ EMSCRIPTEN_KEEPALIVE void setLandmarkWeight(double weight) {
   mainWindow.setLandmarkWeight(weight);
 }
 
-EMSCRIPTEN_KEEPALIVE void setHandleMethod(int method, double radius) {
-  mainWindow.setHandleMethod(method, radius);
+EMSCRIPTEN_KEEPALIVE void setHandleMethod(int method) {
+  mainWindow.setHandleMethod(method);
+}
+
+// R of G2 and P2, in mean edge lengths
+EMSCRIPTEN_KEEPALIVE void setFalloffRadius(double edges) {
+  mainWindow.setFalloffRadius(edges);
 }
 
 EMSCRIPTEN_KEEPALIVE void setManipulationMode(int modeInt) {

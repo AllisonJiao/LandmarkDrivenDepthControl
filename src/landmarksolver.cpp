@@ -1,6 +1,7 @@
 #include "landmarksolver.h"
 
 #include <igl/cotmatrix.h>
+#include <igl/edges.h>
 #include <igl/invert_diag.h>
 #include <igl/massmatrix.h>
 #include <igl/vertex_components.h>
@@ -53,6 +54,14 @@ void LandmarkSolver::prepare(const MatrixXd &VDefault, const MatrixXi &F,
   igl::massmatrix(VFlat, F, igl::MASSMATRIX_TYPE_VORONOI, M);
   igl::invert_diag(M, Minv);
   Q = buildEnergy(L, M, Minv);
+
+  // mean x,y edge length, the unit of the falloff radius
+  MatrixXi E;
+  igl::edges(F, E);
+  meanEdge = 0;
+  for (int e = 0; e < E.rows(); e++)
+    meanEdge += (VFlat.row(E(e, 0)) - VFlat.row(E(e, 1))).norm();
+  meanEdge /= E.rows();
 
   const VectorXd h = VDefault.col(2);
   u0 = h.array().sign() * h.array().square();
@@ -107,10 +116,9 @@ void LandmarkSolver::prepare(const MatrixXd &VDefault, const MatrixXi &F,
   ready = true;
 }
 
-void LandmarkSolver::setMethod(HandleMethod method, double radius) {
-  this->method = method;
-  this->radius = radius;
-}
+void LandmarkSolver::setMethod(HandleMethod method) { this->method = method; }
+
+void LandmarkSolver::setFalloffRadius(double edges) { radiusEdges = edges; }
 
 bool LandmarkSolver::setConstraints(const vector<Landmark> &lms,
                                     double weight) {
@@ -122,6 +130,14 @@ bool LandmarkSolver::setConstraints(const vector<Landmark> &lms,
   // One row per landmark with a single 1 at its vertex, so (B u)_k reads u
   // there and B * u0 is the default u at the landmarks.
   const int n = VDefault.rows();
+  // Every handle must sit on an interior vertex: vertexId is -1 for a
+  // landmark that isn't snapped, and an outline vertex can't move.
+  for (const Landmark &lm : lms)
+    if (lm.vertexId < 0 || lm.vertexId >= n || isFixed[lm.vertexId]) {
+      cerr << "landmark solve: landmark not on an interior vertex (vertex "
+           << lm.vertexId << ")" << endl;
+      return false;
+    }
   vector<Triplet<double>> triplets;
   for (int k = 0; k < lms.size(); k++)
     triplets.emplace_back(k, lms[k].vertexId, 1.0);
@@ -158,16 +174,15 @@ bool LandmarkSolver::setConstraintsBaseline(const vector<Landmark> &lms) {
   // [D2 sheet] the front and back sheets share x,y, and so may overlapping
   //   parts, so a disk around the handle (G2, P2) would cover them too.
   //   falloff() keeps it on the handle's sheet (sheetLabels, from prepare()).
-  // TODO(human) [D3 radius]: `radius` is in canvas pixels, like
-  //   VDefault.col(0) and col(1). Its range and default are set by the
-  //   #landmarkRadius slider in src/ui/myshell.html.
+  // [D3 radius] R is in mean edge lengths (setFalloffRadius); falloff()
+  //   converts it to canvas pixels with meanEdge from prepare().
   // [D5 anchors] an anchor is a landmark whose factor is held
   //   (lms[k].anchor). It keeps its own basis column and target, so the k x k
   //   solve holds it in place while the other handles move.
-  // [D7 outline] pickLandmark and rebindLandmarks never put a handle on a
-  //   fixed vertex: its target r would be 0 and forward() is 0 there, which
-  //   makes the k x k system singular. A check of isFixed here would only
-  //   guard landmarks that come from somewhere else.
+  // [D7 outline] a handle on a fixed vertex would have r = 0 and forward() = 0
+  //   there, which makes the k x k system singular. pickLandmark and
+  //   rebindLandmarks never put one there, and setConstraints() rejects
+  //   landmarks from elsewhere.
   basis.resize(0, 0);  // G1 and P3 use none; free the last method's
   switch (method) {
     case HandleMethod::G1:
@@ -284,13 +299,14 @@ bool LandmarkSolver::factorBasis() {
 
 VectorXd LandmarkSolver::falloff(int v) const {
   // (1 - t^2)^3 has value, slope and curvature 0 at t = 1, so the bump ends
-  // without a ridge in the pressure. radius and d are in canvas pixels.
+  // without a ridge in the pressure. d and R are in canvas pixels.
+  const double R = falloffRadiusPixels();
   VectorXd w = VectorXd::Zero(VDefault.rows());
   for (int j = 0; j < w.size(); j++) {
     if (sheetLabels(j) != sheetLabels(v)) continue;  // other sheet or fixed
     const double dx = VDefault(j, 0) - VDefault(v, 0);
     const double dy = VDefault(j, 1) - VDefault(v, 1);
-    const double t = sqrt(dx * dx + dy * dy) / radius;
+    const double t = sqrt(dx * dx + dy * dy) / R;
     if (t < 1) w(j) = pow(1 - t * t, 3);
   }
   return w;
@@ -355,7 +371,8 @@ bool LandmarkSolver::exportScene(const string &path,
                                      Mdiag.data() + Mdiag.size())},
                 {"landmarks", landmarks},
                 {"method", handleMethodName(method)},
-                {"radius", radius},
+                {"radius", radiusEdges},  // in mean edge lengths
+                {"radius_px", falloffRadiusPixels()},
                 {"du", vector<double>(du.data(), du.data() + du.size())},
                 {"dp", vector<double>(dp.data(), dp.data() + dp.size())}};
 

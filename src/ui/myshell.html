@@ -615,8 +615,8 @@ The exported file may be directly imported into a recent version of <a href="htt
                 <option value="3">P2 bump</option>
                 <option value="4" selected>P3 optimal</option>
               </select>
-              <!-- TODO(human) [D3 radius]: range and default of R in canvas pixels (keep the default equal to LandmarkSolver::radius) -->
-              <input type="range" id="landmarkRadius" min="10" max="200" step="5" value="50" data-tooltip="tooltip" title="Falloff radius R (G2, P2)">
+              <!-- TODO(human) [D3 radius]: range of R in mean edge lengths (keep the default equal to LandmarkSolver::radiusEdges) -->
+              <input type="range" id="landmarkRadius" min="1" max="15" step="0.5" value="4" data-tooltip="tooltip" title="Falloff radius R in edge lengths (G2, P2)">
               <input type="range" id="landmarkWeight" min="-4" max="5" step="0.5" value="5" data-tooltip="tooltip" title="Landmark fit: left = soft (smoother, approximate), right = hard (exact)">
             </span>
             <button type="button" class="btn buttonMode mr-3 mb-1" data-toggle="button" id="buttonAnimate" data-tooltip="tooltip" title="Animate 3D model">

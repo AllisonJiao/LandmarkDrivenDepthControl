@@ -67,8 +67,10 @@ class MainWindow : public MyWindow {
   int getNumberOfLayers();
   void moveSelectedLayersInDepth(int step, bool overlapping);
   void setLandmarkWeight(double weight);
-  // method: an int value of HandleMethod; radius in canvas pixels (G2, P2)
-  void setHandleMethod(int method, double radius);
+  // method: an int value of HandleMethod
+  void setHandleMethod(int method);
+  // falloff radius R of G2 and P2, in mean edge lengths
+  void setFalloffRadius(double edges);
   // score distillation round trip: the scene goes out to the sds/ tool and
   // its optimized heights come back as the new default shape
   bool exportSdsScene(const std::string &path);
