@@ -23,14 +23,14 @@ VectorXd displacementField(const MatrixXd &VRest, const MatrixXd &VDefault) {
   return dh;
 }
 
-VectorXd pressureField(const VectorXd &dpRaw, const MatrixXd &VDefault,
+VectorXd pressureField(const VectorXd &dpOut, const MatrixXd &VDefault,
                        double c, const vector<bool> &fixed) {
   const int n = VDefault.rows();
   VectorXd dp = VectorXd::Zero(n);
-  if (dpRaw.size() != n || c == 0) return dp;
+  if (dpOut.size() != n || c == 0) return dp;
 
-  // dp_i = sgn(h0_i) * dpRaw_i / c
-  dp = VDefault.col(2).array().sign() * dpRaw.array() / c;
+  // dp_i = dpOut_i / c (solver already made sign change)
+  dp = dpOut / c;
 
   // Outlines
   for (int i = 0; i < n; i++)

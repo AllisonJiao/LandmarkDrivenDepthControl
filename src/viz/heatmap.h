@@ -29,10 +29,11 @@ extern const double kHeatmapTable[9][3];
 Eigen::VectorXd displacementField(const Eigen::MatrixXd &VRest,
                                   const Eigen::MatrixXd &VDefault);
 
-// Pressure change relative to the base inflation, dp_i = side_i * dpRaw_i / c
-// with side_i = sgn(h0_i). `dpRaw` is the solver's dp (empty if not
+// Pressure change relative to the base inflation, dp_i = dpOut_i / c.
+// `dpOut` is the solver's outward-positive dp (LandmarkSolver::
+// lastDpOutward(), more inflation positive on both sheets; empty if not
 // available yet); entries of `fixed` vertices are undefined and set to NaN.
-Eigen::VectorXd pressureField(const Eigen::VectorXd &dpRaw,
+Eigen::VectorXd pressureField(const Eigen::VectorXd &dpOut,
                               const Eigen::MatrixXd &VDefault, double c,
                               const std::vector<bool> &fixed);
 

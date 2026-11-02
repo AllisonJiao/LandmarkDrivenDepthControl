@@ -2616,7 +2616,8 @@ void MainWindow::computeHeatmapColors(MatrixXd &C) {
   } else {
     // f = pressureField(VectorXd::Zero(VDefault.rows()), VDefault, defaultInflationAmount,
     //                   landmarkSolver.fixedMask());
-    f = pressureField(landmarkSolver.lastDp(), VDefault, defaultInflationAmount,
+    f = pressureField(landmarkSolver.lastDpOutward(), VDefault,
+                      defaultInflationAmount,
                       landmarkSolver.fixedMask());
   }
   double vmaxUsed = 0;
