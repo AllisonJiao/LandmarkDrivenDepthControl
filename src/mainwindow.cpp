@@ -2614,10 +2614,10 @@ void MainWindow::computeHeatmapColors(MatrixXd &C) {
   if (heatmapOpts.field == HeatField::Displacement) {
     f = displacementField(mesh.VRest, VDefault);
   } else {
-    f = pressureField(VectorXd::Zero(VDefault.rows()), VDefault, defaultInflationAmount,
+    // f = pressureField(VectorXd::Zero(VDefault.rows()), VDefault, defaultInflationAmount,
+    //                   landmarkSolver.fixedMask());
+    f = pressureField(landmarkSolver.lastDp(), VDefault, defaultInflationAmount,
                       landmarkSolver.fixedMask());
-    //f = pressureField(landmarkSolver.lastDp(), VDefault, defaultInflationAmount,
-    //                  landmarkSolver.fixedMask());
   }
   double vmaxUsed = 0;
   scalarsToColors(f, heatmapOpts.lockedVmax, heatmapOpts.symLog,
