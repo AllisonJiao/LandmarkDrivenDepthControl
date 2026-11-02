@@ -29,6 +29,7 @@ set(SOURCES
     exportgltf.cpp
     landmarks.cpp
     landmarksolver.cpp
+    viz/heatmap.cpp
     ../third_party/ir3d-utils/regionToMesh.cpp
     ../third_party/ir3d-utils/MeshBuilder.cpp
     ../third_party/image/imageReadWrite.cpp
@@ -60,6 +61,9 @@ set(HEADERS
     exportgltf.h
     landmarks.h
     landmarksolver.h
+    viz/heatmap.h
+    viz/shaders/shaderFlatColor.h
+    viz/shaders/shaderHeatmap.h
     ../third_party/ir3d-utils/regionToMesh.h
     ../third_party/image/image.h
     ../third_party/image/imageReadWrite.hpp

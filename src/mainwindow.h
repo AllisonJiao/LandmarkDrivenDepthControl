@@ -20,6 +20,7 @@
 #include "landmarks.h"
 #include "landmarksolver.h"
 #include "mywindow.h"
+#include "viz/heatmap.h"
 
 class MainWindow : public MyWindow {
  public:
@@ -43,6 +44,11 @@ class MainWindow : public MyWindow {
   bool getCPsVisibility();
   void setWireframeVisibility(bool visible);
   bool getWireframeVisibility();
+  // heat map (Landmarks mode): field 0 = off, 1 = displacement, 2 = pressure
+  void setHeatmapField(int field);
+  int getHeatmapField();
+  void setHeatmapSymLog(bool enabled);
+  void setHeatmapRangeLocked(bool locked);
   ManipulationMode openProject(const std::string &zipFn,
                                bool changeMode = true);
   void saveProject(const std::string &zipFn);
@@ -161,6 +167,8 @@ class MainWindow : public MyWindow {
   void onLandmarksChanged();
   void applyLandmarkSolve();
   void rebuildDeformationEngine();
+  bool heatmapActive(const Eigen::MatrixXd &V);
+  void computeHeatmapColors(Eigen::MatrixXd &C);
 
   Img<float> depthBuffer;
   Imguc frameBuffer;
@@ -264,6 +272,8 @@ class MainWindow : public MyWindow {
   LandmarkData landmarkData;
   LandmarkSolver landmarkSolver;
   double landmarkWeight = std::numeric_limits<double>::infinity();
+  HeatmapOptions heatmapOpts;
+  double heatmapVmaxShown = -1;  // last range sent to the readout
 
   // control points transform
   bool transformRelative = false;

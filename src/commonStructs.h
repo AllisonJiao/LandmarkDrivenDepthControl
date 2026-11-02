@@ -57,8 +57,8 @@ typedef enum {
 } AnimMode;
 
 struct GLData {
-  GLMeshData meshData, wireData;
-  GLuint shaderMatcap, shaderTexture, shaderFlatColor;
+  GLMeshData meshData, wireData, heatData;
+  GLuint shaderMatcap, shaderTexture, shaderFlatColor, shaderHeatmap;
   std::vector<GLuint> textureNames;
   GLuint templateImgTexName, textureImgTexName[4];
   GLuint backgroundImgTexName;

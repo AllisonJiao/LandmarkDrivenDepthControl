@@ -28,7 +28,8 @@
 #include "loadsave.h"
 #include "macros.h"
 #include "reconstruction.h"
-#include "shaderFlatColor.h"
+#include "viz/shaders/shaderFlatColor.h"
+#include "viz/shaders/shaderHeatmap.h"
 #include "shaderTextureVertexCoords.h"
 
 using namespace std;
@@ -59,9 +60,11 @@ void MainWindow::initOpenGL() {
   // opengl
   GLMeshInitBuffers(glData.meshData);
   GLMeshInitBuffers(glData.wireData);
+  GLMeshInitBuffers(glData.heatData);
   glData.shaderMatcap = loadShaders(SHADERMATCAP_VERT, SHADERMATCAP_FRAG);
   glData.shaderFlatColor =
       loadShaders(SHADERFLATCOLOR_VERT, SHADERFLATCOLOR_FRAG);
+  glData.shaderHeatmap = loadShaders(SHADERHEATMAP_VERT, SHADERHEATMAP_FRAG);
   glData.shaderTexture =
       loadShaders(SHADERTEXVERTCOORDS_VERT, SHADERTEXVERTCOORDS_FRAG);
   deque<string> textureFns{
@@ -75,6 +78,7 @@ void MainWindow::initOpenGL() {
 void MainWindow::destroyOpenGL() {
   GLMeshDestroyBuffers(glData.meshData);
   GLMeshDestroyBuffers(glData.wireData);
+  GLMeshDestroyBuffers(glData.heatData);
 }
 
 bool MainWindow::paintEvent() {
@@ -486,17 +490,29 @@ void MainWindow::drawModelOpenGL(Eigen::MatrixXd &V, Eigen::MatrixXd &Vr,
     glBindTexture(GL_TEXTURE_2D, glData.textureNames[shadingOpts.matcapImg]);
   }
 
+  // heat map of the landmark edit replaces the texture/matcap colours; it
+  // has its own buffers so its colour attribute never leaks into the others
   MatrixXd C;
+  GLMeshData *meshData = &glData.meshData;
+  if (heatmapActive(V) && shadingOpts.matcapImg != -1) {
+    activeShader = glData.shaderHeatmap;
+    glUseProgram(activeShader);
+    glBindTexture(GL_TEXTURE_2D, glData.textureNames[shadingOpts.matcapImg]);
+    textureCoords.resize(0, 0);
+    computeHeatmapColors(C);
+    meshData = &glData.heatData;
+  }
+
   uploadCameraMatrices(activeShader, glData.P, glData.M,
                        glData.M.inverse().transpose());
-  GLMeshFillBuffers(activeShader, glData.meshData, V, F, N, textureCoords, C,
+  GLMeshFillBuffers(activeShader, *meshData, V, F, N, textureCoords, C,
                     PARTID);
   // push the faces slightly back so the wireframe lines win the depth test
   if (shadingOpts.showWireframe) {
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(1, 1);
   }
-  GLMeshDraw(glData.meshData, GL_TRIANGLES);
+  GLMeshDraw(*meshData, GL_TRIANGLES);
   glDisable(GL_POLYGON_OFFSET_FILL);
 
   if (shadingOpts.showWireframe) {
@@ -730,6 +746,10 @@ void MainWindow::keyPressEvent(const MyKeyEvent &keyEvent) {
   }
   if (keyEvent.key == SDLK_g) {
     setWireframeVisibility(!getWireframeVisibility());
+  }
+  if (keyEvent.key == SDLK_m) {
+    // cycle Off -> displacement -> pressure
+    setHeatmapField((getHeatmapField() + 1) % 3);
   }
   if (keyEvent.key == SDLK_j) {
     setTemplateImageVisibility(!getTemplateImageVisibility());
@@ -2532,6 +2552,61 @@ void MainWindow::setWireframeVisibility(bool visible) {
 }
 
 bool MainWindow::getWireframeVisibility() { return shadingOpts.showWireframe; }
+
+void MainWindow::setHeatmapField(int field) {
+  heatmapOpts.field = static_cast<HeatField>(field);
+  heatmapVmaxShown = -1;  // force a readout update
+  repaint = true;
+}
+
+int MainWindow::getHeatmapField() {
+  return static_cast<int>(heatmapOpts.field);
+}
+
+void MainWindow::setHeatmapSymLog(bool enabled) {
+  heatmapOpts.symLog = enabled;
+  heatmapVmaxShown = -1;
+  repaint = true;
+}
+
+void MainWindow::setHeatmapRangeLocked(bool locked) {
+  // lock the range that is currently shown, so switching methods or handles
+  // keeps the colours comparable
+  heatmapOpts.lockedVmax = locked ? max(heatmapVmaxShown, 0.0) : 0;
+  repaint = true;
+}
+
+bool MainWindow::heatmapActive(const MatrixXd &V) {
+  return manipulationMode.mode == LANDMARK_MODE &&
+         heatmapOpts.field != HeatField::Off && landmarkSolver.isReady() &&
+         V.rows() == landmarkSolver.defaultMesh().rows();
+}
+
+void MainWindow::computeHeatmapColors(MatrixXd &C) {
+  const MatrixXd &VDefault = landmarkSolver.defaultMesh();
+  VectorXd f;
+  if (heatmapOpts.field == HeatField::Displacement) {
+    f = displacementField(mesh.VRest, VDefault);
+  } else {
+    f = pressureField(VectorXd::Zero(VDefault.rows()), VDefault, defaultInflationAmount,
+                      landmarkData.fixed);
+    //f = pressureField(landmarkSolver.lastDp(), VDefault, defaultInflationAmount,
+    //                  landmarkData.fixed);
+  }
+  double vmaxUsed = 0;
+  scalarsToColors(f, heatmapOpts.lockedVmax, heatmapOpts.symLog,
+                  heatmapOpts.symLogF0, C, vmaxUsed);
+
+  if (vmaxUsed != heatmapVmaxShown) {
+    heatmapVmaxShown = vmaxUsed;
+#ifdef __EMSCRIPTEN__
+    EM_ASM({ js_heatmapRange($0, $1); }, static_cast<int>(heatmapOpts.field),
+           vmaxUsed);
+#else
+    cout << "heat map range: +-" << vmaxUsed << endl;
+#endif
+  }
+}
 
 ManipulationMode MainWindow::openProject(const std::string &zipFn,
                                          bool changeMode) {

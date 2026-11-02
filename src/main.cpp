@@ -93,6 +93,22 @@ EMSCRIPTEN_KEEPALIVE bool getWireframeVisibility() {
   return mainWindow.getWireframeVisibility();
 }
 
+EMSCRIPTEN_KEEPALIVE void setHeatmapField(int field) {
+  mainWindow.setHeatmapField(field);
+}
+
+EMSCRIPTEN_KEEPALIVE int getHeatmapField() {
+  return mainWindow.getHeatmapField();
+}
+
+EMSCRIPTEN_KEEPALIVE void setHeatmapSymLog(bool enabled) {
+  mainWindow.setHeatmapSymLog(enabled);
+}
+
+EMSCRIPTEN_KEEPALIVE void setHeatmapRangeLocked(bool locked) {
+  mainWindow.setHeatmapRangeLocked(locked);
+}
+
 EMSCRIPTEN_KEEPALIVE bool isAnimationPlaying() {
   return mainWindow.isAnimationPlaying();
 }

@@ -609,6 +609,17 @@ The exported file may be directly imported into a recent version of <a href="htt
             <span id="landmarkControls" class="mr-1 mb-1">
               <span id="landmarkReadout" class="badge badge-light"></span>
               <input type="range" id="landmarkWeight" min="-4" max="5" step="0.5" value="5" data-tooltip="tooltip" title="Landmark fit: left = soft (smoother, approximate), right = hard (exact)">
+              <select id="heatmapField" class="custom-select custom-select-sm ml-2" data-tooltip="tooltip" title="Heat map of the edit (M)">
+                <option value="0">No heat map</option>
+                <option value="1">Displacement</option>
+                <option value="2">Pressure change</option>
+              </select>
+              <span id="heatmapLegend" class="ml-1">
+                <span id="heatmapBar"></span>
+                <span id="heatmapRange" class="badge badge-light"></span>
+                <label class="mb-0 ml-1"><input type="checkbox" id="heatmapLock" autocomplete="off"> lock</label>
+                <label class="mb-0 ml-1"><input type="checkbox" id="heatmapSymLog" autocomplete="off"> log</label>
+              </span>
             </span>
             <button type="button" class="btn buttonMode mr-3 mb-1" data-toggle="button" id="buttonAnimate" data-tooltip="tooltip" title="Animate 3D model">
               <span class="buttonModeNumbers">3</span>Animate

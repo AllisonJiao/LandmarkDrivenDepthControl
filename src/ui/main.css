@@ -57,6 +57,24 @@ canvas.emscripten {
   width: 6em;
   vertical-align: middle;
 }
+#heatmapField {
+  width: auto;
+}
+#heatmapLegend {
+  display: none;
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+/* same 9 stops as kHeatmapTable in src/viz/heatmap.cpp (RdBu_r) */
+#heatmapBar {
+  display: inline-block;
+  width: 6em;
+  height: 0.8em;
+  vertical-align: middle;
+  border: 1px solid #999;
+  background: linear-gradient(to right, #053061, #2166ac, #4393c3, #92c5de,
+    #f7f7f7, #f4a582, #d6604d, #b2182b, #67001f);
+}
 .navbar {
   box-shadow: 0px 0px 5px 0px gray;
 }

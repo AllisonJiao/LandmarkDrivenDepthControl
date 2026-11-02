@@ -103,6 +103,25 @@ $('#landmarkWeight').on('input', function() {
   var weight = v >= parseFloat($(this).attr('max')) ? 0 : Math.pow(10, v);
   Module._setLandmarkWeight(weight);
 });
+// heat map: 0 = off, 1 = displacement, 2 = pressure change
+$('#heatmapField').on('change', function() {
+  var field = parseInt($(this).val());
+  $('#heatmapLegend').css('display', field ? 'inline' : 'none');
+  $('#heatmapLock').prop('checked', false);
+  Module._setHeatmapRangeLocked(false);
+  Module._setHeatmapField(field);
+});
+$('#heatmapLock').on('change', function() {
+  Module._setHeatmapRangeLocked(this.checked);
+});
+$('#heatmapSymLog').on('change', function() {
+  Module._setHeatmapSymLog(this.checked);
+});
+function js_heatmapRange(field, vmax) {
+  // displacement is in sketch pixels, pressure change relative to c
+  var unit = field == 1 ? ' px' : ' × c';
+  $('#heatmapRange').text('±' + vmax.toPrecision(3) + unit);
+}
 function js_landmarkSelected(selected, factor, anchor) {
   var text = '';
   if (selected) text = anchor ? 'anchor' : '×' + factor.toFixed(2);
@@ -160,6 +179,8 @@ function resetToModuleState() {
   if (Module._isMiddleMouseSimulationEnabled()) $('#buttonRotate').addClass('active');
   $('#buttonShowControlPins').prop('checked', Module._getCPsVisibility());
   $('#buttonShowWireframe').prop('checked', Module._getWireframeVisibility());
+  $('#heatmapField').val(Module._getHeatmapField());
+  $('#heatmapLegend').css('display', Module._getHeatmapField() ? 'inline' : 'none');
   $('#buttonShowTemplateImage').prop('checked', Module._getTemplateImageVisibility());
   $('#buttonShowBackgroundImage').prop('checked', Module._getBackgroundImageVisibility());
   $('#buttonUseTextureShading').prop('checked', Module._isTextureShadingEnabled());
@@ -192,6 +213,10 @@ $(window).keydown(function(e) {
   if (e.which === 69) $('#buttonRecord').click();
   if (e.which === 72) $('#buttonShowControlPins').click();
   if (e.which === 71) $('#buttonShowWireframe').click();
+  if (e.which === 77) {
+    var next = (parseInt($('#heatmapField').val()) + 1) % 3;
+    $('#heatmapField').val(next).change();
+  }
   if (e.ctrlKey && e.which === 79) $('#buttonOpenProject').click();
   if (e.ctrlKey && e.which === 83) $('#buttonSaveProject').click();
   if (e.ctrlKey && e.which === 67) Module._copySelectedAnim();
