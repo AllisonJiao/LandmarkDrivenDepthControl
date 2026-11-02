@@ -164,6 +164,15 @@ EMSCRIPTEN_KEEPALIVE void setLandmarkWeight(double weight) {
   mainWindow.setLandmarkWeight(weight);
 }
 
+EMSCRIPTEN_KEEPALIVE void setHandleMethod(int method) {
+  mainWindow.setHandleMethod(method);
+}
+
+// R of G2 and P2, in mean edge lengths
+EMSCRIPTEN_KEEPALIVE void setFalloffRadius(double edges) {
+  mainWindow.setFalloffRadius(edges);
+}
+
 EMSCRIPTEN_KEEPALIVE void setManipulationMode(int modeInt) {
   ManipulationMode mode = DRAW_OUTLINE;
   if (modeInt == 1)
@@ -219,8 +228,11 @@ EMSCRIPTEN_KEEPALIVE void saveProject() {
   EM_ASM(js_projectSaved(););
 }
 
-EMSCRIPTEN_KEEPALIVE void exportSdsScene() {
-  const bool ok = mainWindow.exportSdsScene("/tmp/mm_sds_scene.json");
+// meshName (may be null) is written into the scene so runs can be told apart;
+// from JS: Module.ccall('exportSdsScene', null, ['string'], [name])
+EMSCRIPTEN_KEEPALIVE void exportSdsScene(const char *meshName) {
+  const bool ok = mainWindow.exportSdsScene("/tmp/mm_sds_scene.json",
+                                            meshName ? meshName : "");
   EM_ASM({ js_sdsSceneExported($0); }, ok);
 }
 

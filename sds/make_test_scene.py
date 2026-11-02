@@ -90,8 +90,16 @@ def main():
             T = np.array([B - A, C - A]).T
             w1, w2 = np.linalg.solve(T, p - A)
             if w1 >= 0 and w2 >= 0 and w1 + w2 <= 1:
-                landmarks.append({"face": f, "bary": [1 - w1 - w2, w1, w2],
-                                  "factor": factor, "side": -1, "anchor": False})
+                # snap like pickLandmark: the corner with the largest weight
+                # that is not an outline vertex (ids 0 .. nb-1); the front
+                # sheet uses the pts ids, so tri's corners are mesh vertices
+                w = np.array([1 - w1 - w2, w1, w2])
+                corners = tri[f]
+                ok = corners >= nb
+                if ok.any():
+                    v = int(corners[ok][np.argmax(w[ok])])
+                    landmarks.append({"vertex": v, "factor": factor,
+                                      "side": -1, "anchor": False})
                 break
 
     Lc = L.tocoo()

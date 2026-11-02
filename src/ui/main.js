@@ -122,6 +122,20 @@ function js_heatmapRange(field, vmax) {
   var unit = field == 1 ? ' px' : ' × c';
   $('#heatmapRange').text('±' + vmax.toPrecision(3) + unit);
 }
+// method dropdown and falloff radius go to the solver together; values match
+// HandleMethod in src/landmarksolver.h
+function sendHandleMethod() {
+  var method = parseInt($('#landmarkMethod').val());
+  var radius = parseFloat($('#landmarkRadius').val());
+  var usesRadius = method == 1 || method == 3;  // G2, P2
+  $('#landmarkRadius').css('display', usesRadius ? 'inline-block' : 'none');
+  // TODO(human) [D6 weight]: the soft/hard slider only affects P3 (method 4).
+  // Decide here whether to hide or disable #landmarkWeight for the baselines.
+  Module._setHandleMethod(method);
+  Module._setFalloffRadius(radius);  // in mean edge lengths
+}
+$('#landmarkMethod').on('change', sendHandleMethod);
+$('#landmarkRadius').on('input', sendHandleMethod);
 function js_landmarkSelected(selected, factor, anchor) {
   var text = '';
   if (selected) text = anchor ? 'anchor' : '×' + factor.toFixed(2);

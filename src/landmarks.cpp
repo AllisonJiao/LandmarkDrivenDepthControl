@@ -9,7 +9,6 @@
 using namespace std;
 using namespace Eigen;
 
-bool snapToVertex = true;
 namespace {
 
 Vector2d projectPoint(const Matrix4d &proj, const Vector3d &p) {
@@ -45,12 +44,21 @@ Vector3d blend(const MatrixXd &V, const MatrixXi &F, int face,
   return p;
 }
 
+int pickCorner(const MatrixXi &F, int face, const Vector3d &bary, const std::vector<bool> &isFixed) {
+  int best = -1;
+  for (int c = 0; c < 3; c ++) {
+    if (isFixed[F(face, c)]) continue; // the corner is on the outline
+    if (best == -1 || bary(c) > bary(best)) best = c;
+  }
+  return best;
+}
+
 }  // namespace
 
 bool pickLandmark(const MatrixXd &VCurr, const MatrixXd &VRest,
                   const MatrixXi &F, const Matrix4d &proj,
-                  const Vector2d &mouse, const vector<bool> &fixed,
-                  Landmark &out) {
+                  const Vector2d &mouse, Landmark &out,
+                  const std::vector<bool> &isFixed) {
   if (VCurr.rows() == 0 || VRest.rows() != VCurr.rows()) return false;
   const MatrixXd VProj =
       (VCurr.rowwise().homogeneous() * proj.transpose()).rowwise().hnormalized();
@@ -59,23 +67,28 @@ bool pickLandmark(const MatrixXd &VCurr, const MatrixXd &VRest,
   const int face =
       faceWithBary(VProj, F, mouse(0), mouse(1), false, false, bary);
   if (face == -1) return false;
+  if (static_cast<int>(isFixed.size()) != VRest.rows()) return false;
+
+  // the landmark sits on the corner nearest to the click on screen that is
+  // not on the outline (u is held at 0 there, so a handle couldn't move it)
+  int best = pickCorner(F, face, bary, isFixed);
+  if (best == -1) return false;
+  const int v = F(face, best);
+  const Vector3d p = VRest.row(v);
 
   out = Landmark();
+  out.vertexId = v;
   out.faceId = face;
-  out.bary = bary;
-  if (snapToVertex && !snapLandmarkToVertex(out, VRest, F, fixed))
-    return false;
-
-  const Vector3d rest = blend(VRest, F, face, out.bary);
-  out.sketchPos = rest.head(2);
-  out.side = rest(2) >= 0 ? 1 : -1;
-  out.baseHeight = abs(rest(2));
+  out.bary = Vector3d::Unit(best);
+  out.sketchPos = p.head<2>();
+  out.side = p(2) >= 0 ? 1 : -1;
+  out.baseHeight = abs(p(2));
   return true;
 }
 
 Vector3d surfacePoint(const MatrixXd &V, const MatrixXi &F,
                       const Landmark &lm) {
-  return blend(V, F, lm.faceId, lm.bary);
+  return V.row(lm.vertexId).transpose();
 }
 
 Vector3d targetPoint(const MatrixXd &VDefault, const MatrixXi &F,
@@ -124,11 +137,12 @@ void dragLandmark(Landmark &lm, const MatrixXd &VDefault, const MatrixXi &F,
 }
 
 void rebindLandmarks(LandmarkData &data, const MatrixXd &VRest,
-                     const MatrixXi &F, const vector<vector<int>> &bnds) {
-  data.fixed.assign(VRest.rows(), false);
-  for (const auto &bnd : bnds)
-    for (int i : bnd) data.fixed[i] = true;
-
+                     const MatrixXi &F,
+                     const std::vector<bool> &isFixed) {
+  if (static_cast<int>(isFixed.size()) != VRest.rows()) {
+    data = LandmarkData();
+    return;
+  }
   vector<Landmark> kept;
   for (Landmark lm : data.items) {
     // The rest mesh is viewed orthographically from the sketch plane; front
@@ -151,11 +165,21 @@ void rebindLandmarks(LandmarkData &data, const MatrixXd &VRest,
       }
     }
     if (bestFace == -1) continue;
+    // vertex ids change with every reconstruction, so snap again with the
+    // same rule as pickLandmark; sketchPos stays, so repeated rebinds don't
+    // drift
+    int best = pickCorner(F, bestFace, bestBary, isFixed);
+    if (best == -1) continue;
+    lm.vertexId = F(bestFace, best);
     lm.faceId = bestFace;
-    lm.bary = bestBary;
-    lm.baseHeight = bestHeight;
-    if (snapToVertex && !snapLandmarkToVertex(lm, VRest, F, data.fixed))
-      continue;
+    lm.bary = Vector3d::Unit(best);
+    lm.baseHeight = abs(VRest(lm.vertexId, 2));
+    // on a coarser mesh two landmarks can snap to one vertex; keep the first,
+    // as a click on a taken vertex does (duplicate rows of B are singular)
+    bool taken = false;
+    for (const Landmark &other : kept)
+      if (other.vertexId == lm.vertexId) taken = true;
+    if (taken) continue;
     kept.push_back(lm);
   }
   data.items = kept;
@@ -191,27 +215,3 @@ void drawLandmarks(const LandmarkData &data, const MatrixXd &V,
     }
   }
 }
-
-bool snapLandmarkToVertex(Landmark &lm, const Eigen::MatrixXd &VRest,
-                          const Eigen::MatrixXi &F,
-                          const std::vector<bool> &fixed) {
-  // Dev-only: Find the vertex of the face with the largest barycentric weight,
-  // skipping vertices the solver holds fixed (a handle there can't move)
-  int maxIndex = -1;
-  for (int i = 0; i < 3; ++i) {
-    const int v = F(lm.faceId, i);
-    if (v < fixed.size() && fixed[v]) continue;
-    if (maxIndex == -1 || lm.bary(i) > lm.bary(maxIndex)) maxIndex = i;
-  }
-  if (maxIndex == -1) return false;
-
-  // Update the landmark's barycentric weights to snap to the vertex
-  lm.bary = Eigen::Vector3d::Zero();
-  lm.bary(maxIndex) = 1.0;
-
-  // Update the sketch position to the vertex position
-  lm.sketchPos = VRest.row(F(lm.faceId, maxIndex)).head(2);
-  lm.baseHeight = std::abs(VRest(F(lm.faceId, maxIndex), 2));
-  return true;
-}
-

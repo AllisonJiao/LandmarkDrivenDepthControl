@@ -93,6 +93,7 @@ $$E(\Delta u) \;=\; \tfrac12\, \Delta p^{\top} M\, \Delta p \;=\; \tfrac12\, \De
 
 <h3>Step 5 &mdash; Landmark constraints</h3>
 <p>Landmark \(k\) lies in triangle \(f_k\) with barycentric weights \(\beta_k\); row \(b_k\) of the sparse matrix \(B\) holds those three weights. The default membrane value at the landmark is</p>
+<p class="note">Since milestone 1 every landmark is snapped to an interior vertex \(v_k\), so \(\beta_k\) is a unit vector and \(b_k = e_{v_k}\); everything below still holds.</p>
 $$\bar u_k = b_k^{\top} u_0 .$$
 <p>A height factor \(f_k\) means \(h \mapsto f_k\, h\). Since \(u \propto h^2\), the target and the residual are</p>
 $$t_k = f_k^{2}\, \bar u_k, \qquad r_k = t_k - b_k^{\top} u_0 = \bigl(f_k^{2} - 1\bigr)\, \bar u_k .$$

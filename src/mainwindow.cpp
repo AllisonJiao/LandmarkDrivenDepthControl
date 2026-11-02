@@ -1458,6 +1458,7 @@ void MainWindow::handleMouseReleaseEventGeometryMode(
 void MainWindow::handleMousePressEventLandmarkMode(const MyMouseEvent &event) {
   auto &VCurr = defData.VCurr;
   auto &Faces = defData.Faces;
+
   if (!(event.leftButton || event.rightButton)) return;
   const bool rightMouseButtonActive =
       event.rightButton || (event.leftButton && *rightMouseButtonSimulation);
@@ -1482,8 +1483,17 @@ void MainWindow::handleMousePressEventLandmarkMode(const MyMouseEvent &event) {
 
   Landmark lm;
   if (!pickLandmark(VCurr, landmarkSolver.defaultMesh(), Faces, proj3DView,
-                    mouseCurrPos, landmarkData.fixed, lm)) {
+                    mouseCurrPos, lm, landmarkSolver.fixedMask())) {
     selectLandmark(-1);
+    return;
+  }
+  // a click that misses the marker can still snap to a landmark's vertex; a
+  // second handle there would duplicate its row of B (a singular system), so
+  // select the existing one instead
+  for (int i = 0; i < landmarkData.items.size(); i++) {
+    if (landmarkData.items[i].vertexId != lm.vertexId) continue;
+    selectLandmark(i);
+    landmarkData.dragging = !landmarkData.items[i].anchor;
     return;
   }
   lm.anchor = rightMouseButtonActive;
@@ -1573,9 +1583,23 @@ void MainWindow::setLandmarkWeight(double weight) {
   onLandmarksChanged();
 }
 
-bool MainWindow::exportSdsScene(const std::string &path) {
+void MainWindow::setHandleMethod(int method) {
+  if (method < 0 || method > static_cast<int>(HandleMethod::P3)) return;
+  landmarkSolver.setMethod(static_cast<HandleMethod>(method));
+  onLandmarksChanged();
+}
+
+void MainWindow::setFalloffRadius(double edges) {
+  if (!(edges > 0)) return;
+  landmarkSolver.setFalloffRadius(edges);
+  onLandmarksChanged();
+}
+
+bool MainWindow::exportSdsScene(const std::string &path,
+                                const std::string &meshName) {
   if (!landmarkSolver.isReady()) return false;
-  return landmarkSolver.exportScene(path, landmarkData.items);
+  return landmarkSolver.exportScene(path, landmarkData.items, meshName,
+                                    defaultInflationAmount);
 }
 
 bool MainWindow::importSdsResult(const std::string &path) {
@@ -1616,8 +1640,7 @@ bool MainWindow::importSdsResult(const std::string &path) {
   landmarkSolver.prepare(V, mesh.F, defEng.bnds);
   // the landmarks now measure from the imported shape, so factor 1 keeps it
   for (auto &lm : landmarkData.items) lm.factor = 1;
-  rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F,
-                  defEng.bnds);
+  rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F, landmarkSolver.fixedMask());
   // with no landmarks this still applies the new default mesh (solve()
   // returns it unchanged) and rebuilds ARAP outside LANDMARK_MODE
   onLandmarksChanged();
@@ -1852,7 +1875,11 @@ void MainWindow::reset() {
   backgroundImg.setNull();
   showModel = false;
   landmarkData = LandmarkData();
-  landmarkSolver = LandmarkSolver();
+  // a new project keeps the method chosen in the UI
+  LandmarkSolver freshSolver;
+  freshSolver.setMethod(landmarkSolver.getMethod());
+  freshSolver.setFalloffRadius(landmarkSolver.getFalloffRadius());
+  landmarkSolver = freshSolver;
 
   // reset reconstruction data
   recData = RecData();
@@ -1926,8 +1953,7 @@ void MainWindow::changeManipulationMode(
       proj3DView = proj3DViewInv = Matrix4d::Identity();
 
       landmarkSolver.prepare(mesh.VRest, mesh.F, defEng.bnds);
-      rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F,
-                      defEng.bnds);
+      rebindLandmarks(landmarkData, landmarkSolver.defaultMesh(), mesh.F, landmarkSolver.fixedMask());
       if (!landmarkData.items.empty()) onLandmarksChanged();
 
     } else {
@@ -2589,9 +2615,9 @@ void MainWindow::computeHeatmapColors(MatrixXd &C) {
     f = displacementField(mesh.VRest, VDefault);
   } else {
     f = pressureField(VectorXd::Zero(VDefault.rows()), VDefault, defaultInflationAmount,
-                      landmarkData.fixed);
+                      landmarkSolver.fixedMask());
     //f = pressureField(landmarkSolver.lastDp(), VDefault, defaultInflationAmount,
-    //                  landmarkData.fixed);
+    //                  landmarkSolver.fixedMask());
   }
   double vmaxUsed = 0;
   scalarsToColors(f, heatmapOpts.lockedVmax, heatmapOpts.symLog,
