@@ -1,0 +1,8 @@
+{
+ "version": 1,
+ "depth_unit": "factor",
+ "handles": [
+  {"at": [0.3, 0.2667], "side": -1, "depth": 1.5}
+ ],
+ "sweep": {"handle": 0, "depths": [0.7, 1.2, 1.5, 2.0]}
+}

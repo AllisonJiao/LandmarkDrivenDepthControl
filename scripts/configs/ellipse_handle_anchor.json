@@ -1,0 +1,8 @@
+{
+ "version": 1,
+ "depth_unit": "factor",
+ "handles": [
+  {"at": [-0.3, 0.0], "side": -1, "depth": 1.5},
+  {"at": [0.1, 0.0], "side": -1, "anchor": true}
+ ]
+}

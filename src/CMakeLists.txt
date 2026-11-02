@@ -179,6 +179,23 @@ endif()
 target_compile_options(monstermash PRIVATE ${COMPILER_FLAGS} ${COMPILER_FLAGS_OPENGL})
 
 if (EMSCRIPTEN)
+    # Headless solver for the offline scripts (scripts/cpp_bridge.py), run with
+    # Node: build/web/cli/landmark_cli.js. NODERAWFS gives it the host's files.
+    # landmarks.h pulls in SDL headers through mypainter.h, hence -sUSE_SDL=2
+    # at compile time only; nothing from SDL is linked.
+    # TODO(B5): move struct Landmark into an SDL-free header (coordinate with
+    # Part A: landmarksolver.h includes landmarks.h) so the CLI can also be
+    # built natively.
+    add_executable(landmark_cli tools/landmark_cli.cpp landmarksolver.cpp)
+    target_compile_definitions(landmark_cli PRIVATE ${DEFINES})
+    target_include_directories(landmark_cli PRIVATE ${INCLUDEPATH} ${CMAKE_SOURCE_DIR})
+    target_compile_options(landmark_cli PRIVATE -sUSE_SDL=2
+        -Wno-sign-compare -Werror=return-type -Wno-narrowing)
+    target_link_options(landmark_cli PRIVATE -sENVIRONMENT=node -sNODERAWFS=1
+        -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=5MB -sEXIT_RUNTIME=1)
+    set_target_properties(landmark_cli PROPERTIES SUFFIX ".js"
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/cli)
+
     # Copy the web UI files next to the build output so the build dir can be served directly.
     set(WEB_INCLUDES
         ${CMAKE_SOURCE_DIR}/ui/main.css

@@ -1,0 +1,7 @@
+{
+ "version": 1,
+ "depth_unit": "dh_px",
+ "handles": [
+  {"at": [0.3, 0.2667], "side": -1, "depth": 20}
+ ]
+}
